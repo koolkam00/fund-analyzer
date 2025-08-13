@@ -50,7 +50,7 @@ def _fetch_index_history(ticker: str, start: pd.Timestamp, end: pd.Timestamp) ->
 
 
 def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
-    # Expect: Date (A), Type (B), Value (C), Portfolio Company (D)
+    # Expect: Date (A), Type (B), Value (C), Portfolio Company (D), Fund (E)
     cols = list(df.columns)
     out = pd.DataFrame()
     def _parse_date_col(s: pd.Series) -> pd.Series:
@@ -89,6 +89,15 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         out["portfolio_company"] = "(Unknown)"
+    if len(cols) >= 5:
+        out["fund_name"] = (
+            df.iloc[:, 4]
+            .astype(str)
+            .str.strip()
+            .str.replace(r"\s+", " ", regex=True)
+        )
+    else:
+        out["fund_name"] = "(Unknown Fund)"
     # Map type to standard categories
     out["cat"] = np.select(
         [out["type"].str.contains("capital call|contribution|call", case=False, na=False),
@@ -105,6 +114,7 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
     out = out[out["cat"].isin(["call", "dist", "nav"])].copy()
     # Canonicalize portfolio company for stable grouping
     out["portfolio_company"] = out["portfolio_company"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True).str.upper()
+    out["fund_name"] = out["fund_name"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True).str.upper()
     return out
 
 
@@ -306,7 +316,7 @@ if index_df.empty:
 
 st.subheader("Per-Deal KS-PME")
 rows: List[Dict[str, object]] = []
-for deal, g in cf.groupby("portfolio_company", sort=False):
+for (deal, fund), g in cf.groupby(["portfolio_company", "fund_name"], sort=False):
     kspme = _ks_pme_index_multiple(g, index_df)
     # Compute gross deal IRR from aggregated dated flows.
     g_sorted = g.sort_values("date").copy()
@@ -368,6 +378,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         index_moic = np.nan
     rows.append({
         "Portfolio Company": deal,
+        "Fund": fund,
         "KS-PME": kspme,
         "Deal IRR": deal_irr,
         # Index IRR/Alpha removed
@@ -436,10 +447,11 @@ if not out.empty:
 
     # Diagnostics per deal (optional)
     with st.expander("PME diagnostics (per deal)"):
-        deal_list = sorted(cf["portfolio_company"].unique().tolist())
-        sel_deal = st.selectbox("Select company", deal_list)
-        if sel_deal:
-            g = cf[cf["portfolio_company"] == sel_deal].copy().sort_values("date")
+    deal_list = sorted(cf[["portfolio_company", "fund_name"]].drop_duplicates().apply(lambda r: f"{r['portfolio_company']} — {r['fund_name']}", axis=1).tolist())
+    sel_combo = st.selectbox("Select company — fund", deal_list)
+    if sel_combo:
+        name, fund = sel_combo.split(" — ", 1)
+        g = cf[(cf["portfolio_company"] == name) & (cf["fund_name"] == fund)].copy().sort_values("date")
             idx_series = index_df.set_index("date")["close"].sort_index()
             # Map index level at or before date
             idx_vals = []
