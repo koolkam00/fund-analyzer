@@ -361,7 +361,6 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         # Index IRR/Alpha removed
         "MOIC": moic,
         "PME Multiple": moic_pme,
-        "MOIC Alpha": (moic - moic_pme) if (pd.notna(moic) and pd.notna(moic_pme)) else np.nan,
         "First CF": pd.to_datetime(g["date"]).min(),
         "Last CF": pd.to_datetime(g["date"]).max(),
         "Total Calls": calls_sum,
@@ -380,7 +379,6 @@ if not out.empty:
         "PME Multiple": "{:.2f}",
         "Deal IRR": "{:.1%}",
         "MOIC": "{:.2f}",
-        "MOIC Alpha": "{:.2f}",
         "Total Calls": "{:,.1f}",
         "Total Dists": "{:,.1f}",
         "Last NAV": "{:,.1f}",
