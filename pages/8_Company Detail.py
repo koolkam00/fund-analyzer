@@ -151,30 +151,74 @@ k3.metric("NAV", f"${nav:,.1f}" if pd.notna(nav) else "—")
 k4.metric("Total MOIC", f"{moic:.1f}x" if pd.notna(moic) else "—")
 k5.metric("Gross IRR", f"{irr:.1%}" if pd.notna(irr) else "—")
 
-# Entry vs Exit table
-st.subheader("Entry vs Exit Metrics")
-cols = [
+# Secondary KPIs (not in a table)
+ks1, ks2, ks3, ks4, ks5 = st.columns(5)
+status_val = str(row.get("status", "")).strip()
+invest_dt = pd.to_datetime(row.get("invest_date"), errors="coerce")
+exit_dt = pd.to_datetime(row.get("exit_date"), errors="coerce")
+invest_str = invest_dt.strftime("%b %Y") if pd.notna(invest_dt) else "—"
+# Show Exit Date only if applicable (has proceeds or looks realized)
+proceeds_val = pd.to_numeric(row.get("proceeds"), errors="coerce")
+exit_applicable = (pd.notna(proceeds_val) and proceeds_val > 0) or (status_val.lower() in {"realized", "fully realized", "partially realized"})
+exit_str = exit_dt.strftime("%b %Y") if (pd.notna(exit_dt) and exit_applicable) else "—"
+sector_val = str(row.get("sector", "")).strip()
+# Ownership %: prefer exit ownership; else entry equity / total
+own = np.nan
+if pd.notna(row.get("kam_ownership_exit_pct")):
+    own = float(pd.to_numeric(row.get("kam_ownership_exit_pct"), errors="coerce"))
+elif pd.notna(row.get("kam_equity_entry")) and pd.notna(row.get("equity_entry_total")):
+    denom = float(pd.to_numeric(row.get("equity_entry_total"), errors="coerce"))
+    numer = float(pd.to_numeric(row.get("kam_equity_entry"), errors="coerce"))
+    if denom and denom != 0:
+        own = numer / denom
+ks1.metric("Status", status_val if status_val else "—")
+ks2.metric("Invest Date", invest_str)
+ks3.metric("Exit Date", exit_str)
+ks4.metric("Sector", sector_val if sector_val else "—")
+ks5.metric("Ownership %", f"{own:.1%}" if pd.notna(own) else "—")
+
+# Compute EBITDA margins and change (guarding divides)
+g = g.copy()
+with np.errstate(divide="ignore", invalid="ignore"):
+    if {"entry_ebitda", "entry_revenue"}.issubset(g.columns):
+        g["entry_margin_pct"] = pd.to_numeric(g["entry_ebitda"], errors="coerce") / pd.to_numeric(g["entry_revenue"], errors="coerce")
+    if {"exit_ebitda", "exit_revenue"}.issubset(g.columns):
+        g["exit_margin_pct"] = pd.to_numeric(g["exit_ebitda"], errors="coerce") / pd.to_numeric(g["exit_revenue"], errors="coerce")
+    if {"entry_margin_pct", "exit_margin_pct"}.issubset(g.columns):
+        g["ebitda_margin_change_pct"] = pd.to_numeric(g["exit_margin_pct"], errors="coerce") - pd.to_numeric(g["entry_margin_pct"], errors="coerce")
+
+# Entry/Exit Operating Metrics in requested order
+st.subheader("Entry/Exit Operating Metrics")
+row_vals = g.iloc[0]
+cols1 = [
     "entry_revenue", "exit_revenue",
+    "revenue_cagr", "revenue_growth_pct",
     "entry_ebitda", "exit_ebitda",
-    "entry_tev", "exit_tev",
-    "entry_net_debt", "exit_net_debt",
+    "ebitda_cagr", "ebitda_growth_pct",
+    "entry_margin_pct", "exit_margin_pct", "ebitda_margin_change_pct",
+]
+cols1 = [c for c in cols1 if c in g.columns]
+tbl1 = pd.DataFrame([{c: row_vals.get(c) for c in cols1}])
+fmt1: Dict[str, object] = {}
+for c in ["revenue_cagr", "revenue_growth_pct", "ebitda_cagr", "ebitda_growth_pct", "entry_margin_pct", "exit_margin_pct", "ebitda_margin_change_pct"]:
+    if c in tbl1.columns:
+        fmt1[c] = "{:.1%}"
+for c in ["entry_revenue", "exit_revenue", "entry_ebitda", "exit_ebitda"]:
+    if c in tbl1.columns:
+        fmt1[c] = "{:.1f}"
+st.dataframe(tbl1.style.format(fmt1), use_container_width=True)
+
+# Multiples & Leverage table
+st.subheader("Valuation Multiples & Leverage")
+cols2 = [
     "entry_tev_ebitda", "exit_tev_ebitda",
     "entry_tev_revenue", "exit_tev_revenue",
     "entry_leverage", "exit_leverage",
-    "revenue_growth_pct", "revenue_cagr",
-    "ebitda_growth_pct", "ebitda_cagr",
-    "tev_growth_pct", "tev_cagr",
 ]
-cols = [c for c in cols if c in g.columns]
-tbl = g[cols].copy()
-fmt: Dict[str, object] = {}
-for c in tbl.columns:
-    if c.endswith("_growth_pct") or c.endswith("_cagr") or c.endswith("_pct"):
-        fmt[c] = "{:.1%}"
-for c in ["entry_tev_ebitda", "exit_tev_ebitda", "entry_tev_revenue", "exit_tev_revenue", "entry_leverage", "exit_leverage", "entry_revenue", "exit_revenue", "entry_ebitda", "exit_ebitda", "entry_tev", "exit_tev", "entry_net_debt", "exit_net_debt"]:
-    if c in tbl.columns and c not in fmt:
-        fmt[c] = "{:.1f}"
-st.dataframe(tbl.style.format(fmt), use_container_width=True)
+cols2 = [c for c in cols2 if c in g.columns]
+tbl2 = pd.DataFrame([{c: row_vals.get(c) for c in cols2}])
+fmt2 = {c: "{:.1f}" for c in tbl2.columns}
+st.dataframe(tbl2.style.format(fmt2), use_container_width=True)
 
 # Value creation waterfall for the deal, if available
 st.subheader("Value Creation Waterfall")
