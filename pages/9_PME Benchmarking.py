@@ -73,7 +73,12 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
             errors="coerce",
         )
     if len(cols) >= 4:
-        out["portfolio_company"] = df.iloc[:, 3].astype(str).str.strip()
+        out["portfolio_company"] = (
+            df.iloc[:, 3]
+            .astype(str)
+            .str.strip()
+            .str.replace(r"\s+", " ", regex=True)
+        )
     else:
         out["portfolio_company"] = "(Unknown)"
     # Map type to standard categories
@@ -213,46 +218,45 @@ if index_df.empty:
 
 st.subheader("Per-Deal KS-PME")
 rows: List[Dict[str, object]] = []
-for deal, g in cf.groupby("portfolio_company"):
+for deal, g in cf.groupby("portfolio_company", sort=False):
     kspme = _ks_pme_index_multiple(g, index_df)
-    # Compute gross deal IRR from calls (negative), dists (positive), last NAV as terminal inflow
-    g_sorted = g.sort_values("date")
-    irr_dates = g_sorted["date"].tolist()
-    irr_amounts = []
-    for _, r in g_sorted.iterrows():
-        if r["cat"] == "call":
-            irr_amounts.append(-float(r["amount"]))
-        elif r["cat"] == "dist":
-            irr_amounts.append(float(r["amount"]))
-        elif r["cat"] == "nav":
-            # treat NAV only if last row; handled below
-            irr_amounts.append(0.0)
+    # Compute gross deal IRR from aggregated dated flows.
+    g_sorted = g.sort_values("date").copy()
+    # Aggregate per date: contributions negative, distributions positive; add NAV only on last date
+    last_dt = g_sorted["date"].max()
+    agg = (
+        g_sorted.assign(
+            flow=lambda d: np.where(d["cat"].eq("call"), -d["amount"], np.where(d["cat"].eq("dist"), d["amount"], 0.0))
+        )
+        .groupby("date", as_index=False)["flow"].sum()
+    )
+    nav_last = float(g_sorted.loc[(g_sorted["cat"] == "nav") & (g_sorted["date"] == last_dt), "amount"].sum()) if pd.notna(last_dt) else 0.0
+    if pd.notna(last_dt) and nav_last != 0:
+        # add NAV on last date
+        idx_last = agg.index[agg["date"] == last_dt]
+        if len(idx_last):
+            agg.loc[idx_last, "flow"] = agg.loc[idx_last, "flow"].astype(float) + nav_last
         else:
-            irr_amounts.append(0.0)
-    # If last row is NAV, add it to amounts
-    if not g_sorted.empty and g_sorted.iloc[-1]["cat"] == "nav":
-        irr_amounts[-1] = float(g_sorted.iloc[-1]["amount"])  # terminal value
+            agg = pd.concat([agg, pd.DataFrame({"date": [last_dt], "flow": [nav_last]})], ignore_index=True)
+    agg = agg.sort_values("date")
+    irr_dates = agg["date"].tolist()
+    irr_amounts = [float(x) for x in agg["flow"].tolist()]
     deal_irr = _xirr(irr_dates, irr_amounts)
 
     # Index-equivalent IRR using scaled flows to last index level
     idx_series = index_df.set_index("date")["close"].sort_index()
     last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
     if np.isfinite(last_level):
+        # Build scaled aggregated flows aligned to agg dates
         scaled = []
-        for d, a, cat in zip(g_sorted["date"], g_sorted["amount"], g_sorted["cat"]):
-            # Get latest index level at or before date d
+        for d, amt in zip(agg["date"], agg["flow"]):
             if len(idx_series):
                 upto = idx_series.loc[:d]
                 idx_val = float(upto.iloc[-1]) if not upto.empty else np.nan
             else:
                 idx_val = np.nan
             scale = last_level / idx_val if np.isfinite(idx_val) and (idx_val > 0) else np.nan
-            if cat == "call":
-                scaled.append(-float(a) * (scale if np.isfinite(scale) else 0.0))
-            elif cat == "dist" or cat == "nav":
-                scaled.append(float(a) * (scale if np.isfinite(scale) else 0.0))
-            else:
-                scaled.append(0.0)
+            scaled.append(float(amt) * (scale if np.isfinite(scale) else 0.0))
         idx_irr = _xirr(irr_dates, scaled)
     else:
         idx_irr = None
