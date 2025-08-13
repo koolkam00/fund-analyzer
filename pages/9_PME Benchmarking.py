@@ -310,7 +310,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
     last_dt = g_sorted["date"].max()
     agg = (
         g_sorted.assign(
-            flow=lambda d: np.where(d["cat"].eq("call"), -d["amount"], np.where(d["cat"].eq("dist"), d["amount"], 0.0))
+            flow=lambda d: np.where(d["cat"].eq("nav"), 0.0, d["amount"].astype(float))
         )
         .groupby("date", as_index=False)["flow"].sum()
     )
@@ -323,7 +323,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         else:
             agg = pd.concat([agg, pd.DataFrame({"date": [last_dt], "flow": [nav_last]})], ignore_index=True)
     agg = agg.sort_values("date")
-    irr_dates = [pd.to_datetime(d).to_pydatetime() for d in agg["date"].tolist()]
+    irr_dates = [pd.to_datetime(d).date() for d in agg["date"].tolist()]
     irr_amounts = [float(x) for x in agg["flow"].tolist()]
     # Require at least one negative call and at least one positive (dist or last NAV) for XIRR
     # If no distributions but there is a NAV, include only the last NAV
