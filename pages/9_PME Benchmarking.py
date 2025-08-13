@@ -409,20 +409,26 @@ for (deal, fund), g in cf.groupby(["portfolio_company", "fund_name"], sort=False
         index_moic = (idx_last / idx_first) if (np.isfinite(idx_first) and np.isfinite(idx_last) and idx_first > 0) else np.nan
     else:
         index_moic = np.nan
+    first_cf = pd.to_datetime(g["date"]).min()
+    last_cf = pd.to_datetime(g["date"]).max()
+    hold_years = float(((last_cf - first_cf).days) / 365.2425) if pd.notna(first_cf) and pd.notna(last_cf) else np.nan
+    realized_moic = (dists_sum / calls_sum) if calls_sum > 0 else np.nan
+    unrealized_moic = (nav_last / calls_sum) if calls_sum > 0 else np.nan
     rows.append({
         "Portfolio Company": deal,
         "Fund": fund,
+        "First Cash Flow": first_cf,
+        "Last Cash Flow": last_cf,
+        "Hold Period (yrs)": hold_years,
         "KS-PME": kspme,
-        "Deal IRR": deal_irr,
-        # Index IRR/Alpha removed
-        "MOIC": moic,
-        "PME Multiple": moic_pme,
+        "Realized MOIC": realized_moic,
+        "Unrealized MOIC": unrealized_moic,
+        "Total MOIC": moic,
         "Index MOIC": index_moic,
-        "First CF": pd.to_datetime(g["date"]).min(),
-        "Last CF": pd.to_datetime(g["date"]).max(),
-        "Total Calls": calls_sum,
-        "Total Dists": dists_sum,
-        "Last NAV": nav_last,
+        "IRR": deal_irr,
+        "Invested Capital": calls_sum,
+        "Realized Capital": dists_sum,
+        "Unrealized Capital": nav_last,
     })
 out = pd.DataFrame(rows)
 if not out.empty:
@@ -433,18 +439,38 @@ if not out.empty:
     # Format
     fmt = {
         "KS-PME": "{:.2f}",
-        "PME Multiple": "{:.2f}",
-        "Deal IRR": "{:.1%}",
-        "MOIC": "{:.2f}",
+        "Realized MOIC": "{:.2f}",
+        "Unrealized MOIC": "{:.2f}",
+        "Total MOIC": "{:.2f}",
         "Index MOIC": "{:.2f}",
-        "Total Calls": "{:,.1f}",
-        "Total Dists": "{:,.1f}",
-        "Last NAV": "{:,.1f}",
+        "IRR": "{:.1%}",
+        "Hold Period (yrs)": "{:.1f}",
+        "Invested Capital": "{:,.1f}",
+        "Realized Capital": "{:,.1f}",
+        "Unrealized Capital": "{:,.1f}",
     }
-    for dc in ["First CF", "Last CF"]:
+    for dc in ["First Cash Flow", "Last Cash Flow"]:
         if dc in out.columns:
             out[dc] = pd.to_datetime(out[dc], errors="coerce").dt.strftime("%b %Y")
-    st.dataframe(out.style.format(fmt, na_rep="—"), use_container_width=True)
+    # Reorder columns as requested
+    desired_order = [
+        "Portfolio Company",
+        "Fund",
+        "First Cash Flow",
+        "Last Cash Flow",
+        "Hold Period (yrs)",
+        "KS-PME",
+        "Realized MOIC",
+        "Unrealized MOIC",
+        "Total MOIC",
+        "Index MOIC",
+        "IRR",
+        "Invested Capital",
+        "Realized Capital",
+        "Unrealized Capital",
+    ]
+    show_cols = [c for c in desired_order if c in out.columns]
+    st.dataframe(out[show_cols].style.format(fmt, na_rep="—"), use_container_width=True)
 
     # Portfolio summary: KS-PME, MOIC, IRR
     st.subheader("Portfolio Summary")
