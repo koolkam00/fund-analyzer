@@ -11,6 +11,10 @@ try:
     import numpy_financial as npf
 except Exception:  # pragma: no cover
     npf = None
+try:
+    from pyxirr import xirr as px_xirr
+except Exception:  # pragma: no cover
+    px_xirr = None
 
 
 st.set_page_config(page_title="PME Benchmarking (KS-PME)", layout="wide")
@@ -213,6 +217,14 @@ def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
     try:
         if npf is not None:
             val = npf.xirr(amounts, dates)
+            if np.isfinite(val):
+                return float(val)
+    except Exception:
+        pass
+    # Try pyxirr if available
+    try:
+        if px_xirr is not None:
+            val = px_xirr(dates, amounts)
             if np.isfinite(val):
                 return float(val)
     except Exception:
