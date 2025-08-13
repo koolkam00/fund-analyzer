@@ -325,11 +325,20 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
     agg = agg.sort_values("date")
     irr_dates = [pd.to_datetime(d).to_pydatetime() for d in agg["date"].tolist()]
     irr_amounts = [float(x) for x in agg["flow"].tolist()]
-    # Require at least one negative and one positive CF for XIRR
-    if not (any(a < 0 for a in irr_amounts) and any(a > 0 for a in irr_amounts)):
-        deal_irr = None
-    else:
-        deal_irr = _xirr(irr_dates, irr_amounts)
+    # Require at least one negative call and at least one positive (dist or last NAV) for XIRR
+    # If no distributions but there is a NAV, include only the last NAV
+    has_neg = any(a < 0 for a in irr_amounts)
+    has_pos = any(a > 0 for a in irr_amounts)
+    if not has_pos:
+        # try to use only last NAV as positive terminal
+        nav_series = g_sorted.loc[g_sorted["cat"] == "nav", ["date", "amount"]].sort_values("date")
+        if not nav_series.empty:
+            last_date = nav_series.iloc[-1]["date"]
+            # replace any earlier NAV to 0 and keep only last NAV on its date
+            agg["flow"] = np.where(agg["date"] == last_date, agg["flow"], np.where(agg["flow"] > 0, 0.0, agg["flow"]))
+            irr_amounts = [float(x) for x in agg["flow"].tolist()]
+            has_pos = any(a > 0 for a in irr_amounts)
+    deal_irr = _xirr(irr_dates, irr_amounts) if (has_neg and has_pos) else None
 
     # Index-equivalent IRR using scaled flows to last index level (exclude NAV except last date)
     idx_series = index_df.set_index("date")["close"].sort_index()
