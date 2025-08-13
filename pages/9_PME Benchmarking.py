@@ -470,7 +470,7 @@ if not out.empty:
         "Unrealized Capital",
     ]
     show_cols = [c for c in desired_order if c in out.columns]
-    st.dataframe(out[show_cols].style.format(fmt, na_rep="—"), use_container_width=True)
+    # Per-deal table removed per request
 
     # By-fund tables and summaries
     st.subheader("By Fund")
@@ -545,74 +545,7 @@ if not out.empty:
     irr_str = f"{port_irr:.1%}" if port_irr is not None else "—"
     st.write(f"Portfolio KS-PME: {ks_str} | Portfolio MOIC: {moic_str} | Portfolio IRR: {irr_str}")
 
-    # Diagnostics per deal (optional)
-    with st.expander("PME diagnostics (per deal)"):
-        deal_list = sorted(
-            cf[["portfolio_company", "fund_name"]]
-            .drop_duplicates()
-            .apply(lambda r: f"{r['portfolio_company']} — {r['fund_name']}", axis=1)
-            .tolist()
-        )
-        sel_combo = st.selectbox("Select company — fund", deal_list)
-        if sel_combo:
-            name, fund = sel_combo.split(" — ", 1)
-            g = cf[(cf["portfolio_company"] == name) & (cf["fund_name"] == fund)].copy().sort_values("date")
-            idx_series = index_df.set_index("date")["close"].sort_index()
-            # Map index level at or before date
-            idx_vals = []
-            for d in g["date"].tolist():
-                upto = idx_series.loc[:d]
-                idx_vals.append(float(upto.iloc[-1]) if not upto.empty else np.nan)
-            g["index_level"] = idx_vals
-            last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
-            g["scale"] = last_level / g["index_level"]
-            g["scaled_amount"] = g["amount"] * g["scale"]
-            calls_scaled = -g.loc[g["cat"] == "call", "scaled_amount"].sum()
-            nav_scaled = 0.0
-            if (g["cat"] == "nav").any():
-                last_nav_idx = g.index[g["cat"] == "nav"][ -1 ]
-                nav_scaled = float(g.loc[last_nav_idx, "scaled_amount"])
-            dists_scaled = g.loc[g["cat"] == "dist", "scaled_amount"].sum()
-            denom = float(calls_scaled)
-            numer = float(dists_scaled + nav_scaled)
-            calc_kspme = (numer / denom) if denom and denom > 0 else np.nan
-            st.write(
-                f"Computed KS-PME (diagnostic): {calc_kspme:.2f} | Denom (abs scaled calls): {denom:,.1f} | Numer (scaled dists + last scaled NAV): {numer:,.1f}"
-            )
-            show_cols = ["date", "cat", "amount", "index_level", "scale", "scaled_amount"]
-            st.dataframe(
-                g[show_cols]
-                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.strftime("%b %d, %Y"))
-                .style.format({"amount": "{:,.1f}", "index_level": "{:,.2f}", "scale": "{:.4f}", "scaled_amount": "{:,.1f}"}),
-                use_container_width=True,
-            )
-
-    # Visualization: KS-PME by company
-    import plotly.express as px
-    import plotly.graph_objects as go
-    st.subheader("KS-PME by Portfolio Company")
-    viz = out.copy()
-    viz["Perf vs Index"] = np.where(pd.to_numeric(viz["KS-PME"], errors="coerce") >= 1.0, "Outperform", "Underperform")
-    fig_bar = px.bar(
-        viz.dropna(subset=["KS-PME"]),
-        x="Portfolio Company",
-        y="KS-PME",
-        color="Perf vs Index",
-        color_discrete_map={"Outperform": "#2ca02c", "Underperform": "#d62728"},
-        category_orders={"Portfolio Company": viz["Portfolio Company"].tolist()},
-    )
-    fig_bar.add_hline(y=1.0, line_dash="dash", line_color="#7f7f7f")
-    fig_bar.update_layout(xaxis_tickangle=-45, yaxis_title="KS-PME", legend_title_text="Performance")
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    # Distribution of KS-PME
-    st.caption("Distribution of KS-PME")
-    fig_hist = px.histogram(viz.dropna(subset=["KS-PME"]), x="KS-PME", nbins=25)
-    fig_hist.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
-    fig_hist.update_layout(yaxis_title="Count")
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-    # Removed IRR Alpha scatter per request
+    # Per-deal diagnostics and charts removed per request
 else:
     st.info("No per-deal results to show.")
 
