@@ -513,6 +513,31 @@ if not out.empty:
             irr_f_str = f"{irr_f:.1%}" if irr_f is not None else "—"
             st.caption(f"Fund KS-PME: {ks_f} | Fund MOIC: {moic_f_str} | Fund IRR: {irr_f_str}")
 
+    # Charts: KS-PME by Portfolio Company and distribution
+    import plotly.express as px
+    import plotly.graph_objects as go
+    st.subheader("KS-PME by Portfolio Company")
+    viz = out.copy()
+    if "KS-PME" in viz.columns and "Portfolio Company" in viz.columns:
+        viz["Perf vs Index"] = np.where(pd.to_numeric(viz["KS-PME"], errors="coerce") >= 1.0, "Outperform", "Underperform")
+        fig_bar = px.bar(
+            viz.dropna(subset=["KS-PME"]),
+            x="Portfolio Company",
+            y="KS-PME",
+            color="Perf vs Index",
+            color_discrete_map={"Outperform": "#2ca02c", "Underperform": "#d62728"},
+            category_orders={"Portfolio Company": viz["Portfolio Company"].tolist()},
+        )
+        fig_bar.add_hline(y=1.0, line_dash="dash", line_color="#7f7f7f")
+        fig_bar.update_layout(xaxis_tickangle=-45, yaxis_title="KS-PME", legend_title_text="Performance")
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.caption("Distribution of KS-PME")
+        fig_hist = px.histogram(viz.dropna(subset=["KS-PME"]), x="KS-PME", nbins=25)
+        fig_hist.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
+        fig_hist.update_layout(yaxis_title="Count")
+        st.plotly_chart(fig_hist, use_container_width=True)
+
     # Portfolio summary: KS-PME, MOIC, IRR
     st.subheader("Portfolio Summary")
     # Portfolio KS-PME over all deals
