@@ -112,16 +112,17 @@ def _ks_pme_index_multiple(cf: pd.DataFrame, index_df: pd.DataFrame) -> float | 
     # Kaplan–Schoar PME = (PV of distributions and NAV discounted by index) / (PV of contributions discounted by index)
     if cf.empty or index_df.empty:
         return None
-    # align index level for each cash flow date (forward/backfill to nearest available trading day)
-    idx_series = index_df.set_index("date")["close"].sort_index()
+    # Align index level at-or-before each cash flow date using merge_asof to avoid reindex fill artifacts
     cf = cf.copy()
     cf["date"] = pd.to_datetime(cf["date"], errors="coerce")
     cf = cf.dropna(subset=["date"]).sort_values("date")
-    cf["index_level"] = idx_series.reindex(cf["date"]).ffill().bfill().values
+    idx_sorted = index_df.sort_values("date")[ ["date", "close"] ].copy()
+    aligned = pd.merge_asof(cf[["date"]], idx_sorted, on="date", direction="backward")
+    cf["index_level"] = aligned["close"].values
     if cf["index_level"].isna().all():
         return None
     # For KS-PME, scale cash flows by index level at the date relative to the last date level
-    last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
+    last_level = float(idx_sorted["close"].iloc[-1]) if len(idx_sorted) else np.nan
     if not np.isfinite(last_level) or last_level <= 0:
         return None
     cf["scale"] = last_level / cf["index_level"].replace(0, np.nan)
