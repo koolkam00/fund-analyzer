@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+try:
+    import numpy_financial as npf
+except Exception:  # pragma: no cover
+    npf = None
 
 
 st.set_page_config(page_title="PME Benchmarking (KS-PME)", layout="wide")
@@ -148,8 +152,7 @@ def _xnpv(rate: float, dates: list[pd.Timestamp], amounts: list[float]) -> float
     return total
 
 
-def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
-    # Guard trivial/invalid cases
+def _xirr_newton(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
     if not dates or not amounts or len(dates) != len(amounts):
         return None
     if all(a == 0 for a in amounts):
@@ -176,6 +179,49 @@ def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
             break
         rate = new_rate
     return float(rate) if np.isfinite(rate) and rate > -0.999999 else None
+
+
+def _xirr_bracket(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
+    # Simple bracketing + bisection
+    if not (any(a < 0 for a in amounts) and any(a > 0 for a in amounts)):
+        return None
+    low, high = -0.9, 5.0
+    f_low = _xnpv(low, dates, amounts)
+    f_high = _xnpv(high, dates, amounts)
+    # Expand high if same sign
+    iters = 0
+    while f_low * f_high > 0 and high < 100 and iters < 20:
+        high *= 2
+        f_high = _xnpv(high, dates, amounts)
+        iters += 1
+    if f_low * f_high > 0:
+        return None
+    for _ in range(200):
+        mid = (low + high) / 2
+        f_mid = _xnpv(mid, dates, amounts)
+        if abs(f_mid) < 1e-9:
+            return float(mid)
+        if f_low * f_mid < 0:
+            high, f_high = mid, f_mid
+        else:
+            low, f_low = mid, f_mid
+    return float((low + high) / 2)
+
+
+def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
+    # Try numpy_financial if available
+    try:
+        if npf is not None:
+            val = npf.xirr(amounts, dates)
+            if np.isfinite(val):
+                return float(val)
+    except Exception:
+        pass
+    # Fallbacks
+    val = _xirr_newton(dates, amounts)
+    if val is not None:
+        return val
+    return _xirr_bracket(dates, amounts)
 
 
 st.title("Benchmarking: KS-PME vs Public Indices")
