@@ -109,6 +109,12 @@ if not selected_metrics:
     st.stop()
 
 filtered["invest_date"] = pd.to_datetime(filtered.get("invest_date"), errors="coerce")
+# Ensure numeric types for plotting
+if "invested" in filtered.columns:
+    filtered["invested"] = pd.to_numeric(filtered["invested"], errors="coerce").clip(lower=0)
+for col in ["gross_moic", "gross_irr"]:
+    if col in filtered.columns:
+        filtered[col] = pd.to_numeric(filtered[col], errors="coerce")
 
 opt_col1, opt_col2, opt_col3 = st.columns(3)
 exclude_outliers = opt_col1.checkbox("Exclude outliers (percentile)", value=True)
@@ -144,14 +150,15 @@ for r in range(rows):
                 q_low = plot_df["y_val"].quantile(low_pct / 100.0)
                 q_high = plot_df["y_val"].quantile(high_pct / 100.0)
                 plot_df = plot_df[(plot_df["y_val"] >= q_low) & (plot_df["y_val"] <= q_high)]
+            # Drop invalid points
+            plot_df = plot_df.dropna(subset=["invest_date", "y_val"]) if not plot_df.empty else plot_df
+            size_col = "invested" if ("invested" in plot_df.columns and plot_df["invested"].notna().any()) else None
             fig = px.scatter(
                 plot_df,
                 x="invest_date",
                 y="y_val",
                 color="fund_name" if "fund_name" in plot_df.columns else None,
-                size="invested" if "invested" in plot_df.columns else None,
-                hover_name=None,
-                hover_data=None,
+                size=size_col,
                 title=f"{metric} vs Investment Date",
             )
             fig.update_layout(legend_title_text="Fund")
