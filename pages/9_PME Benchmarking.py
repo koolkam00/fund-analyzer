@@ -269,10 +269,11 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         idx_irr = None
 
     # MOIC and index-equivalent MOIC
-    calls_sum = float(g.loc[g["cat"] == "call", "amount"].sum())
+    # Positive magnitude for total calls
+    calls_sum = float(-g.loc[g["cat"] == "call", "amount"].sum())
     dists_sum = float(g.loc[g["cat"] == "dist", "amount"].sum())
     nav_last = float(g.loc[g["cat"] == "nav", "amount"].tail(1).sum())
-    moic = (dists_sum + nav_last) / calls_sum if calls_sum else np.nan
+    moic = (dists_sum + nav_last) / calls_sum if calls_sum > 0 else np.nan
     moic_pme = float(kspme) if kspme is not None else np.nan
     rows.append({
         "Portfolio Company": deal,
