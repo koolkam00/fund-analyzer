@@ -344,27 +344,8 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
             has_pos = any(a > 0 for a in irr_amounts)
     deal_irr = _xirr(irr_dates, irr_amounts) if (has_neg and has_pos) else None
 
-    # Index-equivalent IRR using scaled flows to last index level (exclude NAV except last date)
-    idx_series = index_df.set_index("date")["close"].sort_index()
-    last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
-    if np.isfinite(last_level):
-        # Build scaled aggregated flows aligned to agg dates
-        scaled = []
-        for d, amt in zip(agg["date"], agg["flow"]):
-            if len(idx_series):
-                upto = idx_series.loc[:d]
-                idx_val = float(upto.iloc[-1]) if not upto.empty else np.nan
-            else:
-                idx_val = np.nan
-            scale = last_level / idx_val if np.isfinite(idx_val) and (idx_val > 0) else np.nan
-            scaled.append(float(amt) * (scale if np.isfinite(scale) else 0.0))
-        # Index IRR requires both negative and positive
-        if any(a < 0 for a in scaled) and any(a > 0 for a in scaled):
-            idx_irr = _xirr(irr_dates, scaled)
-        else:
-            idx_irr = None
-    else:
-        idx_irr = None
+    # Index-equivalent IRR removed per request
+    idx_irr = None
 
     # MOIC and index-equivalent MOIC
     # Positive magnitude for total calls
@@ -377,8 +358,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         "Portfolio Company": deal,
         "KS-PME": kspme,
         "Deal IRR": deal_irr,
-        "Index IRR": idx_irr,
-        "IRR Alpha": (deal_irr - idx_irr) if (deal_irr is not None and idx_irr is not None) else np.nan,
+        # Index IRR/Alpha removed
         "MOIC": moic,
         "PME Multiple": moic_pme,
         "MOIC Alpha": (moic - moic_pme) if (pd.notna(moic) and pd.notna(moic_pme)) else np.nan,
@@ -399,8 +379,6 @@ if not out.empty:
         "KS-PME": "{:.2f}",
         "PME Multiple": "{:.2f}",
         "Deal IRR": "{:.1%}",
-        "Index IRR": "{:.1%}",
-        "IRR Alpha": "{:.1%}",
         "MOIC": "{:.2f}",
         "MOIC Alpha": "{:.2f}",
         "Total Calls": "{:,.1f}",
@@ -412,12 +390,37 @@ if not out.empty:
             out[dc] = pd.to_datetime(out[dc], errors="coerce").dt.strftime("%b %Y")
     st.dataframe(out.style.format(fmt, na_rep="—"), use_container_width=True)
 
-    # Portfolio summary
+    # Portfolio summary: KS-PME, MOIC, IRR
     st.subheader("Portfolio Summary")
-    tot_calls = float(cf.loc[cf["cat"] == "call", "amount"].sum())
-    tot_dists = float(cf.loc[cf["cat"] == "dist", "amount"].sum())
-    last_nav = float(cf.loc[cf["cat"] == "nav", "amount"].tail(1).sum())
-    st.write(f"Total Calls: ${tot_calls:,.1f} | Total Distributions: ${tot_dists:,.1f} | Last NAV: ${last_nav:,.1f}")
+    # Portfolio KS-PME over all deals
+    port_kspme = _ks_pme_index_multiple(cf, index_df)
+    # Portfolio MOIC: sum dists + sum of last NAV per deal, over abs sum calls
+    calls_port = float(-cf.loc[cf["cat"] == "call", "amount"].sum())
+    dists_port = float(cf.loc[cf["cat"] == "dist", "amount"].sum())
+    nav_port = float(cf[cf["cat"] == "nav"].sort_values(["portfolio_company", "date"]).groupby("portfolio_company")["amount"].tail(1).sum())
+    port_moic = (dists_port + nav_port) / calls_port if calls_port > 0 else np.nan
+    # Portfolio IRR: aggregate flows by date across deals, using only last NAV per deal
+    flows = []
+    for deal, g in cf.groupby("portfolio_company", sort=False):
+        g_sorted = g.sort_values("date")
+        # include only last NAV
+        if (g_sorted["cat"] == "nav").any():
+            nav_date = g_sorted.loc[g_sorted["cat"] == "nav", "date"].max()
+            g_use = g_sorted[(g_sorted["cat"] != "nav") | (g_sorted["date"] == nav_date)].copy()
+        else:
+            g_use = g_sorted.copy()
+        flows.append(g_use[["date", "amount"]])
+    if flows:
+        port_flows = pd.concat(flows, ignore_index=True).groupby("date", as_index=False)["amount"].sum().sort_values("date")
+        port_dates = [pd.to_datetime(d).date() for d in port_flows["date"].tolist()]
+        port_amts = [float(x) for x in port_flows["amount"].tolist()]
+        port_irr = _xirr(port_dates, port_amts) if (any(a < 0 for a in port_amts) and any(a > 0 for a in port_amts)) else None
+    else:
+        port_irr = None
+    ks_str = f"{port_kspme:.2f}" if pd.notna(port_kspme) else "—"
+    moic_str = f"{port_moic:.2f}" if pd.notna(port_moic) else "—"
+    irr_str = f"{port_irr:.1%}" if port_irr is not None else "—"
+    st.write(f"Portfolio KS-PME: {ks_str} | Portfolio MOIC: {moic_str} | Portfolio IRR: {irr_str}")
 
     # Diagnostics per deal (optional)
     with st.expander("PME diagnostics (per deal)"):
@@ -473,20 +476,7 @@ if not out.empty:
     fig_hist.update_layout(yaxis_title="Count")
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    # IRR Alpha vs PME Multiple scatter
-    st.subheader("IRR Alpha vs PME Multiple")
-    scatter_df = viz.dropna(subset=["IRR Alpha", "PME Multiple"]).copy()
-    if not scatter_df.empty:
-        fig_sc = px.scatter(
-            scatter_df,
-            x="PME Multiple",
-            y="IRR Alpha",
-            hover_name="Portfolio Company",
-        )
-        fig_sc.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
-        fig_sc.add_hline(y=0.0, line_dash="dash", line_color="#7f7f7f")
-        fig_sc.update_yaxes(tickformat=".1%")
-        st.plotly_chart(fig_sc, use_container_width=True)
+    # Removed IRR Alpha scatter per request
 else:
     st.info("No per-deal results to show.")
 
