@@ -45,8 +45,17 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
     # Expect: Date (A), Type (B), Value (C), Portfolio Company (D)
     cols = list(df.columns)
     out = pd.DataFrame()
+    def _parse_date_col(s: pd.Series) -> pd.Series:
+        # Try native parse
+        d = pd.to_datetime(s, errors="coerce")
+        # If many NaT and input looks numeric, treat as Excel serial dates
+        if (d.isna().mean() > 0.25) and (pd.api.types.is_numeric_dtype(s) or s.astype(str).str.fullmatch(r"\d+").mean() > 0):
+            numeric = pd.to_numeric(s, errors="coerce")
+            origin = pd.Timestamp("1899-12-30")
+            d = origin + pd.to_timedelta(numeric, unit="D")
+        return d
     if len(cols) >= 1:
-        out["date"] = pd.to_datetime(df.iloc[:, 0], errors="coerce")
+        out["date"] = _parse_date_col(df.iloc[:, 0])
     if len(cols) >= 2:
         out["type"] = df.iloc[:, 1].astype(str).str.strip().str.lower()
     if len(cols) >= 3:
