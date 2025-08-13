@@ -283,9 +283,28 @@ def _download_template_button():
 _download_template_button()
 
 with st.sidebar:
-    upload = st.file_uploader("Upload cash flows (.xlsx or .csv) — columns: Date | Type | Value | Portfolio Company", type=["xlsx", "csv"])  # type: ignore
+    upload = st.file_uploader("Upload cash flows (.xlsx or .csv) — columns: Date | Type | Value | Portfolio Company | Fund", type=["xlsx", "csv"])  # type: ignore
     header_row_index = st.number_input("Header row (1-based)", min_value=1, max_value=100, value=1, step=1)
-    index_choice = st.selectbox("Benchmark index", ["S&P 500 (\u005EGSPC)", "Nasdaq (\u005EIXIC)", "Dow Jones (\u005EDJI)"])
+    index_options = [
+        "S&P 500 (\u005EGSPC)",
+        "Nasdaq Composite (\u005EIXIC)",
+        "Dow Jones (\u005EDJI)",
+        "Russell 2000 (\u005ERUT)",
+        "Russell 3000 (\u005ERUA)",
+        # S&P Sector ETFs (SPDR)
+        "S&P Comm Services (XLC)",
+        "S&P Consumer Discretionary (XLY)",
+        "S&P Consumer Staples (XLP)",
+        "S&P Energy (XLE)",
+        "S&P Financials (XLF)",
+        "S&P Health Care (XLV)",
+        "S&P Industrials (XLI)",
+        "S&P Materials (XLB)",
+        "S&P Real Estate (XLRE)",
+        "S&P Technology (XLK)",
+        "S&P Utilities (XLU)",
+    ]
+    index_choice = st.selectbox("Benchmark index", index_options)
 
 raw_df = _read_excel_or_csv(upload, header_row_index)
 if raw_df.empty:
@@ -305,8 +324,22 @@ if pd.isna(min_dt) or pd.isna(max_dt):
 
 ticker_map = {
     "S&P 500 (\u005EGSPC)": "^GSPC",
-    "Nasdaq (\u005EIXIC)": "^IXIC",
+    "Nasdaq Composite (\u005EIXIC)": "^IXIC",
     "Dow Jones (\u005EDJI)": "^DJI",
+    "Russell 2000 (\u005ERUT)": "^RUT",
+    "Russell 3000 (\u005ERUA)": "^RUA",
+    # Sector ETFs
+    "S&P Comm Services (XLC)": "XLC",
+    "S&P Consumer Discretionary (XLY)": "XLY",
+    "S&P Consumer Staples (XLP)": "XLP",
+    "S&P Energy (XLE)": "XLE",
+    "S&P Financials (XLF)": "XLF",
+    "S&P Health Care (XLV)": "XLV",
+    "S&P Industrials (XLI)": "XLI",
+    "S&P Materials (XLB)": "XLB",
+    "S&P Real Estate (XLRE)": "XLRE",
+    "S&P Technology (XLK)": "XLK",
+    "S&P Utilities (XLU)": "XLU",
 }
 ticker = ticker_map.get(index_choice, "^GSPC")
 index_df = _fetch_index_history(ticker, min_dt - pd.Timedelta(days=7), max_dt + pd.Timedelta(days=7))
