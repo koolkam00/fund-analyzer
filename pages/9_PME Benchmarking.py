@@ -354,6 +354,18 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
     nav_last = float(g.loc[g["cat"] == "nav", "amount"].tail(1).sum())
     moic = (dists_sum + nav_last) / calls_sum if calls_sum > 0 else np.nan
     moic_pme = float(kspme) if kspme is not None else np.nan
+    # Index MOIC: invest $1 at first CF date, hold to last CF date (at-or-before levels)
+    idx_series = index_df.set_index("date")["close"].sort_index()
+    first_dt = pd.to_datetime(g["date"]).min()
+    last_dt = pd.to_datetime(g["date"]).max()
+    if pd.notna(first_dt) and pd.notna(last_dt) and len(idx_series):
+        upto_first = idx_series.loc[:first_dt]
+        upto_last = idx_series.loc[:last_dt]
+        idx_first = float(upto_first.iloc[-1]) if not upto_first.empty else np.nan
+        idx_last = float(upto_last.iloc[-1]) if not upto_last.empty else np.nan
+        index_moic = (idx_last / idx_first) if (np.isfinite(idx_first) and np.isfinite(idx_last) and idx_first > 0) else np.nan
+    else:
+        index_moic = np.nan
     rows.append({
         "Portfolio Company": deal,
         "KS-PME": kspme,
@@ -361,6 +373,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         # Index IRR/Alpha removed
         "MOIC": moic,
         "PME Multiple": moic_pme,
+        "Index MOIC": index_moic,
         "First CF": pd.to_datetime(g["date"]).min(),
         "Last CF": pd.to_datetime(g["date"]).max(),
         "Total Calls": calls_sum,
@@ -379,6 +392,7 @@ if not out.empty:
         "PME Multiple": "{:.2f}",
         "Deal IRR": "{:.1%}",
         "MOIC": "{:.2f}",
+        "Index MOIC": "{:.2f}",
         "Total Calls": "{:,.1f}",
         "Total Dists": "{:,.1f}",
         "Last NAV": "{:,.1f}",
