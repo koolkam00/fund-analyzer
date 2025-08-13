@@ -472,6 +472,47 @@ if not out.empty:
     show_cols = [c for c in desired_order if c in out.columns]
     st.dataframe(out[show_cols].style.format(fmt, na_rep="—"), use_container_width=True)
 
+    # By-fund tables and summaries
+    st.subheader("By Fund")
+    if "Fund" in out.columns and "fund_name" in cf.columns:
+        for fund in sorted(out["Fund"].dropna().unique().tolist()):
+            st.markdown(f"**{fund}**")
+            of = out[out["Fund"] == fund]
+            st.dataframe(of[show_cols].style.format(fmt, na_rep="—"), use_container_width=True)
+            # Fund summary
+            cf_f = cf[cf["fund_name"] == fund]
+            fund_kspme = _ks_pme_index_multiple(cf_f, index_df)
+            calls_f = float(-cf_f.loc[cf_f["cat"] == "call", "amount"].sum())
+            dists_f = float(cf_f.loc[cf_f["cat"] == "dist", "amount"].sum())
+            nav_f = float(
+                cf_f[cf_f["cat"] == "nav"]
+                .sort_values(["portfolio_company", "date"])
+                .groupby("portfolio_company")["amount"].tail(1)
+                .sum()
+            )
+            moic_f = (dists_f + nav_f) / calls_f if calls_f > 0 else np.nan
+            # Fund IRR from aggregated flows (last NAV per deal)
+            flows_f = []
+            for _, gfund in cf_f.groupby(["portfolio_company", "fund_name"], sort=False):
+                g_sorted = gfund.sort_values("date")
+                if (g_sorted["cat"] == "nav").any():
+                    nav_date = g_sorted.loc[g_sorted["cat"] == "nav", "date"].max()
+                    g_use = g_sorted[(g_sorted["cat"] != "nav") | (g_sorted["date"] == nav_date)].copy()
+                else:
+                    g_use = g_sorted.copy()
+                flows_f.append(g_use[["date", "amount"]])
+            if flows_f:
+                fl_df = pd.concat(flows_f, ignore_index=True).groupby("date", as_index=False)["amount"].sum().sort_values("date")
+                f_dates = [pd.to_datetime(d).date() for d in fl_df["date"].tolist()]
+                f_amts = [float(x) for x in fl_df["amount"].tolist()]
+                irr_f = _xirr(f_dates, f_amts) if (any(a < 0 for a in f_amts) and any(a > 0 for a in f_amts)) else None
+            else:
+                irr_f = None
+            ks_f = f"{fund_kspme:.2f}" if pd.notna(fund_kspme) else "—"
+            moic_f_str = f"{moic_f:.2f}" if pd.notna(moic_f) else "—"
+            irr_f_str = f"{irr_f:.1%}" if irr_f is not None else "—"
+            st.caption(f"Fund KS-PME: {ks_f} | Fund MOIC: {moic_f_str} | Fund IRR: {irr_f_str}")
+
     # Portfolio summary: KS-PME, MOIC, IRR
     st.subheader("Portfolio Summary")
     # Portfolio KS-PME over all deals
