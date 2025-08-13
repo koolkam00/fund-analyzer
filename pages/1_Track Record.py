@@ -197,6 +197,20 @@ with st.expander(f"All Funds — Total • Invested: ${overall_invest:,.1f} | Re
         }
     ])
     st.dataframe(_fmt(overall_row[summary_cols]), use_container_width=True)
+    # Quick nav to Company Detail from All Deals list
+    if {portfolio_header, "fund_name"}.issubset(f.columns):
+        c_nav1, c_nav2 = st.columns([3,1])
+        opts_df = f[[portfolio_header, "fund_name"]].dropna().astype(str).drop_duplicates()
+        opts_df["label"] = opts_df[portfolio_header] + " — " + opts_df["fund_name"]
+        sel = c_nav1.selectbox("Open a deal in Company Detail", opts_df["label"].tolist())
+        if c_nav2.button("Open", use_container_width=True):
+            parts = sel.split(" — ", 1)
+            st.session_state["detail_company"] = parts[0]
+            st.session_state["detail_fund"] = parts[1] if len(parts) > 1 else ""
+            try:
+                st.switch_page("pages/8_Company Detail.py")
+            except Exception:
+                pass
 
     # Subtotals by realization status (Fully Realized, Partially Realized, Unrealized)
     proceeds_num = pd.to_numeric(f.get("proceeds"), errors="coerce").fillna(0)
@@ -339,11 +353,40 @@ for fund, g in f.groupby("fund_name"):
                 "gross_irr": np.nan,
             }
         ])
-        table = pd.concat([summary[display_cols], rows[display_cols]], ignore_index=True)
+        # Server-side sorting selector for per-fund table (sort only deal rows, keep summary on top)
+        sleft, sright = st.columns([3,1])
+        sortable_cols = [c for c in display_cols if c in rows.columns]
+        sort_col = sleft.selectbox("Sort by", sortable_cols, index=0, key=f"tr_sort_col_{fund}")
+        sort_asc = sright.toggle("Asc", value=False, key=f"tr_sort_dir_{fund}")
+        rows_sorted = rows[display_cols].copy()
+        if sort_col in ["invest_date", "exit_date"] and sort_col in rows_sorted.columns:
+            rows_sorted[sort_col] = pd.to_datetime(rows_sorted[sort_col], errors="coerce")
+            rows_sorted = rows_sorted.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
+            rows_sorted[sort_col] = rows_sorted[sort_col].dt.strftime("%b %Y")
+        elif sort_col not in [portfolio_header, "sector", "status"] and sort_col in rows_sorted.columns:
+            rows_sorted = rows_sorted.sort_values(by=sort_col, key=lambda s: pd.to_numeric(s, errors="coerce"), ascending=sort_asc, na_position="last")
+        else:
+            if sort_col in rows_sorted.columns:
+                rows_sorted = rows_sorted.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
+        table = pd.concat([summary[display_cols], rows_sorted], ignore_index=True)
         # Format date columns as Mon YYYY
         for dc in ["invest_date", "exit_date"]:
             if dc in table.columns:
                 table[dc] = pd.to_datetime(table[dc], errors="coerce").dt.strftime("%b %Y")
         st.dataframe(_fmt(table), use_container_width=True)
+        # Per-fund quick nav
+        if {portfolio_header, "fund_name"}.issubset(rows.columns):
+            c_navf1, c_navf2 = st.columns([3,1])
+            o2 = rows[[portfolio_header, "fund_name"]].dropna().astype(str).drop_duplicates()
+            o2["label"] = o2[portfolio_header] + " — " + o2["fund_name"]
+            sel2 = c_navf1.selectbox("Open a deal in Company Detail", o2["label"].tolist(), key=f"nav_{fund}")
+            if c_navf2.button("Open", use_container_width=True, key=f"nav_btn_{fund}"):
+                parts2 = sel2.split(" — ", 1)
+                st.session_state["detail_company"] = parts2[0]
+                st.session_state["detail_fund"] = parts2[1] if len(parts2) > 1 else ""
+                try:
+                    st.switch_page("pages/8_Company Detail.py")
+                except Exception:
+                    pass
 
 

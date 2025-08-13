@@ -120,6 +120,13 @@ portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
 if portfolio_header not in f.columns and "portfolio_company" in f.columns:
     f.insert(0, portfolio_header, f["portfolio_company"])  # ensure display col exists
 
+# Build unique x-axis label combining company and fund to separate cross-fund investments
+x_label_col = f"{portfolio_header} (Fund)"
+if portfolio_header in f.columns and "fund_name" in f.columns:
+    f[x_label_col] = f[portfolio_header].astype(str) + " — " + f["fund_name"].astype(str)
+else:
+    f[x_label_col] = f.get(portfolio_header, pd.Series(dtype=str)).astype(str)
+
 with np.errstate(divide="ignore", invalid="ignore"):
     if {"entry_ebitda", "entry_revenue"}.issubset(f.columns):
         f["entry_margin_pct"] = pd.to_numeric(f["entry_ebitda"], errors="coerce") / pd.to_numeric(f["entry_revenue"], errors="coerce")
@@ -128,10 +135,10 @@ with np.errstate(divide="ignore", invalid="ignore"):
 
 f["sort_change_ebitda"] = pd.to_numeric(f.get("exit_ebitda"), errors="coerce") - pd.to_numeric(f.get("entry_ebitda"), errors="coerce")
 f = f.sort_values("sort_change_ebitda", ascending=False, na_position="last")
-x_order = f[portfolio_header].astype(str).tolist() if portfolio_header in f.columns else []
+x_order = f[x_label_col].astype(str).tolist() if x_label_col in f.columns else []
 
 def grouped_bar(df_in: pd.DataFrame, y_entry: str, y_exit: str, y_format: str, title: str, x_order: List[str]):
-    x_vals = df_in[portfolio_header].astype(str).tolist() if portfolio_header in df_in.columns else list(range(len(df_in)))
+    x_vals = df_in[x_label_col].astype(str).tolist() if x_label_col in df_in.columns else list(range(len(df_in)))
     y1 = pd.to_numeric(df_in.get(y_entry), errors="coerce")
     y2 = pd.to_numeric(df_in.get(y_exit), errors="coerce")
     df_plot = df_in.copy()
@@ -144,7 +151,7 @@ def grouped_bar(df_in: pd.DataFrame, y_entry: str, y_exit: str, y_format: str, t
             q_high = both.quantile(high_pct / 100.0)
             mask = (df_plot["y1"].between(q_low, q_high)) & (df_plot["y2"].between(q_low, q_high))
             df_plot = df_plot[mask]
-    x_vals = df_plot[portfolio_header].astype(str).tolist() if portfolio_header in df_plot.columns else list(range(len(df_plot)))
+    x_vals = df_plot[x_label_col].astype(str).tolist() if x_label_col in df_plot.columns else list(range(len(df_plot)))
     y1 = df_plot["y1"]
     y2 = df_plot["y2"]
     fig = go.Figure()
@@ -165,7 +172,7 @@ def grouped_bar(df_in: pd.DataFrame, y_entry: str, y_exit: str, y_format: str, t
     fig.update_layout(
         barmode="group",
         title=title,
-        xaxis_title=portfolio_header,
+        xaxis_title=x_label_col,
         yaxis_title=y_entry.replace("entry_", "").replace("_", " ").title(),
         xaxis_tickangle=-45,
         legend_title_text="Point in Time",

@@ -147,6 +147,32 @@ if not wa_mult.empty:
     )
 st.plotly_chart(fig_dep, use_container_width=True)
 
+st.subheader("Deployment by Investment Year (stacked by Sector) & WA Entry TEV/Revenue")
+# Weighted average Entry TEV/Revenue by invest year
+wa_rev = pd.DataFrame()
+if {"entry_tev_revenue", "invested", "year_invest"}.issubset(f.columns):
+    tmp_rev = f[["year_invest", "entry_tev_revenue", "invested"]].dropna(subset=["year_invest"]) 
+    def _wa_rev(g: pd.DataFrame) -> float:
+        vals = pd.to_numeric(g["entry_tev_revenue"], errors="coerce")
+        w = pd.to_numeric(g["invested"], errors="coerce").clip(lower=0)
+        if w.notna().sum() and float(w.sum()) > 0:
+            return float(np.average(vals.fillna(0), weights=w.fillna(0)))
+        return np.nan
+    wa_rev = tmp_rev.groupby("year_invest").apply(_wa_rev).reset_index(name="wa_entry_tev_revenue")
+
+fig_dep_rev = go.Figure()
+if not dep_stack.empty:
+    for sec in dep_stack['sector'].dropna().unique().tolist():
+        seg = dep_stack[dep_stack['sector'] == sec]
+        fig_dep_rev.add_bar(name=str(sec), x=seg['year_invest'], y=seg['invested'])
+fig_dep_rev.update_layout(barmode='stack', title='Invested Capital by Year (Stacked by Sector)', xaxis_title='Investment Year', yaxis_title='Invested')
+if not wa_rev.empty:
+    fig_dep_rev.add_scatter(x=wa_rev['year_invest'], y=wa_rev['wa_entry_tev_revenue'], name='WA Entry TEV/Revenue', mode='lines+markers', yaxis='y2')
+    fig_dep_rev.update_layout(
+        yaxis2=dict(title='WA Entry TEV/Revenue', overlaying='y', side='right', showgrid=False)
+    )
+st.plotly_chart(fig_dep_rev, use_container_width=True)
+
 st.subheader("Realizations by Exit Year (stacked by Sector)")
 if {"proceeds", "sector", "year_exit"}.issubset(f.columns):
     real_stack = f.groupby(["year_exit", "sector"])['proceeds'].sum(min_count=1).reset_index().dropna(subset=["year_exit"]) 

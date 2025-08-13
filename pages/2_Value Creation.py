@@ -47,14 +47,21 @@ def compute_value_creation(df: pd.DataFrame) -> pd.DataFrame:
     nd1 = pd.to_numeric(df.get("exit_net_debt"), errors="coerce")
 
     with np.errstate(divide="ignore", invalid="ignore"):
-        mult0 = tev0 / e0
-        mult1 = tev1 / e1
-        marg0 = e0 / r0
-        marg1 = e1 / r1
+        # Use safe denominators: EBITDA and Revenue must be > 0
+        mult0 = np.where(e0 > 0, tev0 / e0, np.nan)
+        mult1 = np.where(e1 > 0, tev1 / e1, np.nan)
+        marg0 = np.where(r0 > 0, e0 / r0, np.nan)
+        marg1 = np.where(r1 > 0, e1 / r1, np.nan)
+        # Clean inf values
+        mult0 = pd.Series(mult0).replace([np.inf, -np.inf], np.nan)
+        mult1 = pd.Series(mult1).replace([np.inf, -np.inf], np.nan)
+        marg0 = pd.Series(marg0).replace([np.inf, -np.inf], np.nan)
+        marg1 = pd.Series(marg1).replace([np.inf, -np.inf], np.nan)
 
         rev_growth = (r1 - r0) * marg0 * mult0
         margin_exp = r1 * (marg1 - marg0) * mult0
-        multiple_change = (mult1 - mult0) * e1
+        e1_safe = e1.where(e1 > 0)
+        multiple_change = (mult1 - mult0) * e1_safe
         deleveraging = -(nd1 - nd0)
 
         eq0 = tev0 - nd0
@@ -169,8 +176,29 @@ view = f.copy()
 if portfolio_header not in view.columns and "portfolio_company" in view.columns:
     view.insert(0, portfolio_header, view["portfolio_company"])  # ensure first col
 view = view[[c for c in display_cols if c in view.columns]]
+# Build a unique label (Company — Fund) to distinguish cross-fund investments for selections
+label_col_unique = f"{portfolio_header} (Fund)"
+if portfolio_header in view.columns and "fund_name" in view.columns:
+    view[label_col_unique] = view[portfolio_header].astype(str) + " — " + view["fund_name"].astype(str)
+else:
+    view[label_col_unique] = view.get(portfolio_header, pd.Series(dtype=str)).astype(str)
 fmt = {col: "{:.1f}" for col in view.select_dtypes(include=["number"]).columns}
 st.dataframe(view.style.format(fmt), use_container_width=True)
+
+# Quick navigation to Company Detail
+if {portfolio_header, "fund_name"}.issubset(view.columns):
+    nav_opts = view[[portfolio_header, "fund_name"]].dropna().astype(str).drop_duplicates()
+    nav_opts[label_col_unique] = nav_opts[portfolio_header] + " — " + nav_opts["fund_name"]
+    c_nav1, c_nav2 = st.columns([3,1])
+    sel = c_nav1.selectbox("Open in Company Detail", nav_opts[label_col_unique].tolist())
+    if c_nav2.button("Open", use_container_width=True):
+        parts = sel.split(" — ", 1)
+        st.session_state["detail_company"] = parts[0]
+        st.session_state["detail_fund"] = parts[1] if len(parts) > 1 else ""
+        try:
+            st.switch_page("pages/8_Company Detail.py")
+        except Exception:
+            pass
 
 # Aggregated waterfall across all filtered deals
 st.subheader("Portfolio Waterfall (filtered)")
@@ -234,10 +262,10 @@ if sum(v for v in port_values_abs if pd.notna(v)) > 0:
     st.plotly_chart(pie_port, use_container_width=True)
 
 st.subheader("Waterfall (per deal)")
-deal_names = view[portfolio_header].dropna().astype(str).unique().tolist() if portfolio_header in view.columns else []
+deal_names = view[label_col_unique].dropna().astype(str).unique().tolist() if label_col_unique in view.columns else []
 sel_deal = st.selectbox("Select deal", deal_names)
 if sel_deal:
-    row = view.loc[view[portfolio_header] == sel_deal].iloc[0]
+    row = view.loc[view[label_col_unique] == sel_deal].iloc[0]
     start = float(row.get("equity_entry", np.nan))
     rev = float(row.get("vc_rev_growth", 0.0))
     marg = float(row.get("vc_margin_expansion", 0.0))
@@ -313,6 +341,16 @@ if "fund_name" in f.columns:
             ]
             cols = [c for c in cols if c in g.columns or c == portfolio_header]
             tbl = g[cols].copy()
+            # Server-side sorting to ensure numeric-correct order
+            sort_left, sort_right = st.columns([3,1])
+            sort_options = [c for c in tbl.columns]
+            sort_col = sort_left.selectbox("Sort by", sort_options, index=0, key=f"vc_sort_col_{fund}")
+            sort_asc = sort_right.toggle("Asc", value=False, key=f"vc_sort_dir_{fund}")
+            # Convert selected column to numeric when possible for correct ordering
+            if sort_col != portfolio_header:
+                tbl = tbl.sort_values(by=sort_col, key=lambda s: pd.to_numeric(s, errors="coerce"), ascending=sort_asc, na_position="last")
+            else:
+                tbl = tbl.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
             # Format as %
             fmt = {}
             for c in ["ebitda_growth_pct", "ebitda_cagr", "revenue_growth_pct", "revenue_cagr", "ebitda_margin_change_pct"]:

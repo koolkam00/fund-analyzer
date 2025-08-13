@@ -279,7 +279,12 @@ def add_growth_and_cagr(
 
     # Revenue
     df["revenue_growth_pct"] = growth(df.get("entry_revenue"), df.get("exit_revenue"))
-    df["ebitda_growth_pct"] = growth(df.get("entry_ebitda"), df.get("exit_ebitda"))
+    # EBITDA: guard against negative or zero values (percent growth undefined)
+    e_entry = pd.to_numeric(df.get("entry_ebitda"), errors="coerce")
+    e_exit = pd.to_numeric(df.get("exit_ebitda"), errors="coerce")
+    mask_pos = (e_entry > 0) & (e_exit > 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        df["ebitda_growth_pct"] = np.where(mask_pos, (e_exit - e_entry) / e_entry, np.nan)
     df["tev_growth_pct"] = growth(df.get("entry_tev"), df.get("exit_tev"))
     df["net_debt_change_pct"] = growth(df.get("entry_net_debt"), df.get("exit_net_debt"))
 
@@ -288,7 +293,12 @@ def add_growth_and_cagr(
         # guard against non-positive years
         yrs = yrs.where(yrs > 0)
         df["revenue_cagr"] = cagr(df.get("entry_revenue"), df.get("exit_revenue"), yrs)
-        df["ebitda_cagr"] = cagr(df.get("entry_ebitda"), df.get("exit_ebitda"), yrs)
+        # EBITDA CAGR only when both entry and exit are positive and years > 0
+        df["ebitda_cagr"] = np.where(
+            mask_pos & (yrs > 0),
+            (e_exit.replace({0: np.nan}) / e_entry.replace({0: np.nan})) ** (1 / yrs) - 1,
+            np.nan,
+        )
         df["tev_cagr"] = cagr(df.get("entry_tev"), df.get("exit_tev"), yrs)
     else:
         df["revenue_cagr"] = np.nan
@@ -550,11 +560,13 @@ def extract_operational_by_template_order(
 
     # Multiples
     with np.errstate(divide="ignore", invalid="ignore"):
-        out["entry_tev_ebitda"] = out["entry_tev"] / out["entry_ebitda"]
-        out["exit_tev_ebitda"] = out["exit_tev"] / out["exit_ebitda"]
+        # Multiples defined only when EBITDA > 0
+        out["entry_tev_ebitda"] = np.where(out["entry_ebitda"] > 0, out["entry_tev"] / out["entry_ebitda"], np.nan)
+        out["exit_tev_ebitda"] = np.where(out["exit_ebitda"] > 0, out["exit_tev"] / out["exit_ebitda"], np.nan)
         # Leverage ratios and TEV/Revenue
-        out["entry_leverage"] = out["entry_net_debt"] / out["entry_ebitda"]
-        out["exit_leverage"] = out["exit_net_debt"] / out["exit_ebitda"]
+        # Allow negative net debt; require positive EBITDA denominator
+        out["entry_leverage"] = np.where(out["entry_ebitda"] > 0, out["entry_net_debt"] / out["entry_ebitda"], np.nan)
+        out["exit_leverage"] = np.where(out["exit_ebitda"] > 0, out["exit_net_debt"] / out["exit_ebitda"], np.nan)
         out["entry_tev_revenue"] = out["entry_tev"] / out["entry_revenue"]
         out["exit_tev_revenue"] = out["exit_tev"] / out["exit_revenue"]
 

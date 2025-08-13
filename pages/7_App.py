@@ -241,6 +241,21 @@ def main():
         left_cols = [portfolio_header] if portfolio_header in view_df.columns else []
         table_df = view_df[left_cols + [c for c in show_cols if c in view_df.columns and c != "deal"]]
         st.dataframe(table_df.style.format(fmt), use_container_width=True)
+        # Quick nav to Company Detail
+        portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
+        if {portfolio_header, "fund_name"}.issubset(view_df.columns):
+            cnav1, cnav2 = st.columns([3,1])
+            nav_df = view_df[[portfolio_header, "fund_name"]].dropna().astype(str).drop_duplicates()
+            nav_df["label"] = nav_df[portfolio_header] + " — " + nav_df["fund_name"]
+            choice = cnav1.selectbox("Open a deal in Company Detail", nav_df["label"].tolist())
+            if cnav2.button("Open", use_container_width=True):
+                parts = choice.split(" — ", 1)
+                st.session_state["detail_company"] = parts[0]
+                st.session_state["detail_fund"] = parts[1] if len(parts) > 1 else ""
+                try:
+                    st.switch_page("pages/8_Company Detail.py")
+                except Exception:
+                    pass
         download_df = table_df.copy()
         _download_df_button("Download operating metrics (CSV)", download_df, "operating_metrics.csv")
 
