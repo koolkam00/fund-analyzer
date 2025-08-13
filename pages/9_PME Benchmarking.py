@@ -415,6 +415,35 @@ if not out.empty:
     last_nav = float(cf.loc[cf["cat"] == "nav", "amount"].tail(1).sum())
     st.write(f"Total Calls: ${tot_calls:,.1f} | Total Distributions: ${tot_dists:,.1f} | Last NAV: ${last_nav:,.1f}")
 
+    # Diagnostics per deal (optional)
+    with st.expander("PME diagnostics (per deal)"):
+        deal_list = sorted(cf["portfolio_company"].unique().tolist())
+        sel_deal = st.selectbox("Select company", deal_list)
+        if sel_deal:
+            g = cf[cf["portfolio_company"] == sel_deal].copy().sort_values("date")
+            idx_series = index_df.set_index("date")["close"].sort_index()
+            # Map index level at or before date
+            idx_vals = []
+            for d in g["date"].tolist():
+                upto = idx_series.loc[:d]
+                idx_vals.append(float(upto.iloc[-1]) if not upto.empty else np.nan)
+            g["index_level"] = idx_vals
+            last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
+            g["scale"] = last_level / g["index_level"]
+            g["scaled_amount"] = g["amount"] * g["scale"]
+            calls_scaled = -g.loc[g["cat"] == "call", "scaled_amount"].sum()
+            nav_scaled = 0.0
+            if (g["cat"] == "nav").any():
+                last_nav_idx = g.index[g["cat"] == "nav"][ -1 ]
+                nav_scaled = float(g.loc[last_nav_idx, "scaled_amount"])
+            dists_scaled = g.loc[g["cat"] == "dist", "scaled_amount"].sum()
+            denom = float(calls_scaled)
+            numer = float(dists_scaled + nav_scaled)
+            calc_kspme = (numer / denom) if denom and denom > 0 else np.nan
+            st.write(f"Computed KS-PME (diagnostic): {calc_kspme:.2f} | Denom (abs scaled calls): {denom:,.1f} | Numer (scaled dists + last scaled NAV): {numer:,.1f}")
+            show_cols = ["date", "cat", "amount", "index_level", "scale", "scaled_amount"]
+            st.dataframe(g[show_cols].assign(date=lambda d: pd.to_datetime(d["date"]).dt.strftime("%b %d, %Y")).style.format({"amount": "{:,.1f}", "index_level": "{:,.2f}", "scale": "{:.4f}", "scaled_amount": "{:,.1f}"}), use_container_width=True)
+
     # Visualization: KS-PME by company
     import plotly.express as px
     import plotly.graph_objects as go
