@@ -116,8 +116,47 @@ def _ks_pme_index_multiple(cf: pd.DataFrame, index_df: pd.DataFrame) -> float | 
     return numer / denom
 
 
+def _xnpv(rate: float, dates: list[pd.Timestamp], amounts: list[float]) -> float:
+    if rate <= -0.999999:
+        return np.inf
+    t0 = min(dates)
+    total = 0.0
+    for d, a in zip(dates, amounts):
+        days = (d - t0).days
+        total += a / ((1 + rate) ** (days / 365.2425))
+    return total
+
+
+def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
+    # Newton-Raphson
+    rate = 0.15
+    for _ in range(100):
+        f = _xnpv(rate, dates, amounts)
+        h = 1e-6
+        f1 = _xnpv(rate + h, dates, amounts)
+        d = (f1 - f) / h
+        if not np.isfinite(d) or abs(d) < 1e-12:
+            break
+        new_rate = rate - f / d
+        if not np.isfinite(new_rate) or new_rate <= -0.999999:
+            new_rate = (rate + max(-0.9, min(1.0, new_rate))) / 2
+        if abs(new_rate - rate) < 1e-9:
+            rate = new_rate
+            break
+        rate = new_rate
+    return float(rate) if np.isfinite(rate) and rate > -0.999999 else None
+
+
 st.title("Benchmarking: KS-PME vs Public Indices")
 st.caption("Upload gross cash flows by deal to compute KS-PME against S&P 500 / Nasdaq / Dow Jones.")
+
+st.markdown(
+    """
+    KS-PME compares a deal's performance to a public index by scaling all cash flows by index levels over time.
+    - KS-PME > 1.0: outperformed the selected index
+    - KS-PME < 1.0: underperformed the selected index
+    """
+)
 
 def _download_template_button():
     example = pd.DataFrame(
@@ -176,6 +215,64 @@ st.subheader("Per-Deal KS-PME")
 rows: List[Dict[str, object]] = []
 for deal, g in cf.groupby("portfolio_company"):
     kspme = _ks_pme_index_multiple(g, index_df)
+    # Compute gross deal IRR from calls (negative), dists (positive), last NAV as terminal inflow
+    g_sorted = g.sort_values("date")
+    irr_dates = g_sorted["date"].tolist()
+    irr_amounts = []
+    for _, r in g_sorted.iterrows():
+        if r["cat"] == "call":
+            irr_amounts.append(-float(r["amount"]))
+        elif r["cat"] == "dist":
+            irr_amounts.append(float(r["amount"]))
+        elif r["cat"] == "nav":
+            # treat NAV only if last row; handled below
+            irr_amounts.append(0.0)
+        else:
+            irr_amounts.append(0.0)
+    # If last row is NAV, add it to amounts
+    if not g_sorted.empty and g_sorted.iloc[-1]["cat"] == "nav":
+        irr_amounts[-1] = float(g_sorted.iloc[-1]["amount"])  # terminal value
+    deal_irr = _xirr(irr_dates, irr_amounts)
+
+    # Index-equivalent IRR using scaled flows to last index level
+    idx_series = index_df.set_index("date")["close"].sort_index()
+    last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
+    if np.isfinite(last_level):
+        scaled = []
+        for d, a, cat in zip(g_sorted["date"], g_sorted["amount"], g_sorted["cat"]):
+            idx = idx_series.reindex([d]).ffill().bfill().iloc[0] if len(idx_series) else np.nan
+            scale = last_level / idx if np.isfinite(idx) and idx not in (0, np.nan) else np.nan
+            if cat == "call":
+                scaled.append(-float(a) * (scale if np.isfinite(scale) else 0.0))
+            elif cat == "dist" or cat == "nav":
+                scaled.append(float(a) * (scale if np.isfinite(scale) else 0.0))
+            else:
+                scaled.append(0.0)
+        idx_irr = _xirr(irr_dates, scaled)
+    else:
+        idx_irr = None
+
+    # MOIC and index-equivalent MOIC
+    calls_sum = float(g.loc[g["cat"] == "call", "amount"].sum())
+    dists_sum = float(g.loc[g["cat"] == "dist", "amount"].sum())
+    nav_last = float(g.loc[g["cat"] == "nav", "amount"].tail(1).sum())
+    moic = (dists_sum + nav_last) / calls_sum if calls_sum else np.nan
+    moic_pme = float(kspme) if kspme is not None else np.nan
+    rows.append({
+        "Portfolio Company": deal,
+        "KS-PME": kspme,
+        "Deal IRR": deal_irr,
+        "Index IRR": idx_irr,
+        "IRR Alpha": (deal_irr - idx_irr) if (deal_irr is not None and idx_irr is not None) else np.nan,
+        "MOIC": moic,
+        "PME Multiple": moic_pme,
+        "MOIC Alpha": (moic - moic_pme) if (pd.notna(moic) and pd.notna(moic_pme)) else np.nan,
+        "First CF": pd.to_datetime(g["date"]).min(),
+        "Last CF": pd.to_datetime(g["date"]).max(),
+        "Total Calls": calls_sum,
+        "Total Dists": dists_sum,
+        "Last NAV": nav_last,
+    })
     rows.append({
         "Portfolio Company": deal,
         "KS-PME": kspme,
@@ -194,6 +291,12 @@ if not out.empty:
     # Format
     fmt = {
         "KS-PME": "{:.2f}",
+        "PME Multiple": "{:.2f}",
+        "Deal IRR": "{:.1%}",
+        "Index IRR": "{:.1%}",
+        "IRR Alpha": "{:.1%}",
+        "MOIC": "{:.2f}",
+        "MOIC Alpha": "{:.2f}",
         "Total Calls": "{:,.1f}",
         "Total Dists": "{:,.1f}",
         "Last NAV": "{:,.1f}",
@@ -209,6 +312,46 @@ if not out.empty:
     tot_dists = float(cf.loc[cf["cat"] == "dist", "amount"].sum())
     last_nav = float(cf.loc[cf["cat"] == "nav", "amount"].tail(1).sum())
     st.write(f"Total Calls: ${tot_calls:,.1f} | Total Distributions: ${tot_dists:,.1f} | Last NAV: ${last_nav:,.1f}")
+
+    # Visualization: KS-PME by company
+    import plotly.express as px
+    import plotly.graph_objects as go
+    st.subheader("KS-PME by Portfolio Company")
+    viz = out.copy()
+    viz["Perf vs Index"] = np.where(pd.to_numeric(viz["KS-PME"], errors="coerce") >= 1.0, "Outperform", "Underperform")
+    fig_bar = px.bar(
+        viz.dropna(subset=["KS-PME"]),
+        x="Portfolio Company",
+        y="KS-PME",
+        color="Perf vs Index",
+        color_discrete_map={"Outperform": "#2ca02c", "Underperform": "#d62728"},
+        category_orders={"Portfolio Company": viz["Portfolio Company"].tolist()},
+    )
+    fig_bar.add_hline(y=1.0, line_dash="dash", line_color="#7f7f7f")
+    fig_bar.update_layout(xaxis_tickangle=-45, yaxis_title="KS-PME", legend_title_text="Performance")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Distribution of KS-PME
+    st.caption("Distribution of KS-PME")
+    fig_hist = px.histogram(viz.dropna(subset=["KS-PME"]), x="KS-PME", nbins=25)
+    fig_hist.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
+    fig_hist.update_layout(yaxis_title="Count")
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+    # IRR Alpha vs PME Multiple scatter
+    st.subheader("IRR Alpha vs PME Multiple")
+    scatter_df = viz.dropna(subset=["IRR Alpha", "PME Multiple"]).copy()
+    if not scatter_df.empty:
+        fig_sc = px.scatter(
+            scatter_df,
+            x="PME Multiple",
+            y="IRR Alpha",
+            hover_name="Portfolio Company",
+        )
+        fig_sc.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
+        fig_sc.add_hline(y=0.0, line_dash="dash", line_color="#7f7f7f")
+        fig_sc.update_yaxes(tickformat=".1%")
+        st.plotly_chart(fig_sc, use_container_width=True)
 else:
     st.info("No per-deal results to show.")
 
