@@ -169,6 +169,9 @@ for deal, g in cf.groupby("portfolio_company"):
     })
 out = pd.DataFrame(rows)
 if not out.empty:
+    # Ensure numeric for formatter and handle None
+    if "KS-PME" in out.columns:
+        out["KS-PME"] = pd.to_numeric(out["KS-PME"], errors="coerce")
     out = out.sort_values("KS-PME", ascending=False, na_position="last")
     # Format
     fmt = {
@@ -180,7 +183,7 @@ if not out.empty:
     for dc in ["First CF", "Last CF"]:
         if dc in out.columns:
             out[dc] = pd.to_datetime(out[dc], errors="coerce").dt.strftime("%b %Y")
-    st.dataframe(out.style.format(fmt), use_container_width=True)
+    st.dataframe(out.style.format(fmt, na_rep="—"), use_container_width=True)
 
     # Portfolio summary
     st.subheader("Portfolio Summary")
