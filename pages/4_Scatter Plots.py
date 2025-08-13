@@ -153,12 +153,18 @@ for r in range(rows):
             # Drop invalid points
             plot_df = plot_df.dropna(subset=["invest_date", "y_val"]) if not plot_df.empty else plot_df
             size_col = "invested" if ("invested" in plot_df.columns and plot_df["invested"].notna().any()) else None
+            if size_col is not None:
+                # Ensure no NaNs for size to avoid Plotly validator errors on per-trace splits
+                plot_df["_size"] = pd.to_numeric(plot_df[size_col], errors="coerce").fillna(0).clip(lower=0)
+                size_arg = "_size"
+            else:
+                size_arg = None
             fig = px.scatter(
                 plot_df,
                 x="invest_date",
                 y="y_val",
                 color="fund_name" if "fund_name" in plot_df.columns else None,
-                size=size_col,
+                size=size_arg,
                 title=f"{metric} vs Investment Date",
             )
             fig.update_layout(legend_title_text="Fund")
