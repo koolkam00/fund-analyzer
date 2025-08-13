@@ -90,6 +90,13 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
         default="other",
     )
     out = out.dropna(subset=["date", "amount"])  # keep necessary
+    # Normalize signs: calls negative, dists/nav positive
+    out.loc[out["cat"] == "call", "amount"] = -out.loc[out["cat"] == "call", "amount"].abs()
+    out.loc[out["cat"].isin(["dist", "nav"]), "amount"] = out.loc[out["cat"].isin(["dist", "nav"]), "amount"].abs()
+    # Keep only recognized categories
+    out = out[out["cat"].isin(["call", "dist", "nav"])].copy()
+    # Canonicalize portfolio company for stable grouping
+    out["portfolio_company"] = out["portfolio_company"].astype(str).str.strip().str.replace(r"\s+", " ", regex=True).str.upper()
     return out
 
 
@@ -281,15 +288,6 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         "Total Calls": calls_sum,
         "Total Dists": dists_sum,
         "Last NAV": nav_last,
-    })
-    rows.append({
-        "Portfolio Company": deal,
-        "KS-PME": kspme,
-        "First CF": pd.to_datetime(g["date"]).min(),
-        "Last CF": pd.to_datetime(g["date"]).max(),
-        "Total Calls": float(g.loc[g["cat"] == "call", "amount"].sum()),
-        "Total Dists": float(g.loc[g["cat"] == "dist", "amount"].sum()),
-        "Last NAV": float(g.loc[g["cat"] == "nav", "amount"].tail(1).sum()),
     })
 out = pd.DataFrame(rows)
 if not out.empty:
