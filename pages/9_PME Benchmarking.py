@@ -126,7 +126,9 @@ def _ks_pme_index_multiple(cf: pd.DataFrame, index_df: pd.DataFrame) -> float | 
     nav_rows = cf.loc[cf["cat"] == "nav"].sort_values("date")
     if not nav_rows.empty:
         last_nav_row = nav_rows.iloc[-1]
-        nav_scaled = float((last_nav_row["amount"] or 0.0) * (last_nav_row["scale"] or 0.0))
+        nav_amt = float(pd.to_numeric(last_nav_row.get("amount"), errors="coerce") or 0.0)
+        nav_scl = float(pd.to_numeric(last_nav_row.get("scale"), errors="coerce") or 0.0)
+        nav_scaled = nav_amt * nav_scl
     # Denominator: positive magnitude of scaled calls
     denom = float(-calls_scaled.sum())
     numer = float(dists_scaled.sum() + nav_scaled)
@@ -263,7 +265,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
         else:
             agg = pd.concat([agg, pd.DataFrame({"date": [last_dt], "flow": [nav_last]})], ignore_index=True)
     agg = agg.sort_values("date")
-    irr_dates = agg["date"].tolist()
+    irr_dates = [pd.to_datetime(d).to_pydatetime() for d in agg["date"].tolist()]
     irr_amounts = [float(x) for x in agg["flow"].tolist()]
     deal_irr = _xirr(irr_dates, irr_amounts)
 
