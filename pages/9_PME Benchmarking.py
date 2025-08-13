@@ -117,12 +117,19 @@ def _ks_pme_index_multiple(cf: pd.DataFrame, index_df: pd.DataFrame) -> float | 
     if not np.isfinite(last_level) or last_level <= 0:
         return None
     cf["scale"] = last_level / cf["index_level"].replace(0, np.nan)
-    # Separate contributions (calls, negative outflow for investor) and distributions/NAV (positive inflow)
-    calls = cf[cf["cat"] == "call"]["amount"].fillna(0) * cf[cf["cat"] == "call"]["scale"].fillna(0)
-    dists = cf[cf["cat"] == "dist"]["amount"].fillna(0) * cf[cf["cat"] == "dist"]["scale"].fillna(0)
-    navs = cf[cf["cat"] == "nav"]["amount"].fillna(0) * cf[cf["cat"] == "nav"]["scale"].fillna(0)
-    denom = float(calls.sum())
-    numer = float(dists.sum() + navs.sum())
+    # Separate contributions (calls negative) and distributions; include ONLY last NAV
+    calls_scaled = cf.loc[cf["cat"] == "call", ["amount", "scale"]]
+    calls_scaled = (calls_scaled["amount"].fillna(0) * calls_scaled["scale"].fillna(0))
+    dists_scaled = cf.loc[cf["cat"] == "dist", ["amount", "scale"]]
+    dists_scaled = (dists_scaled["amount"].fillna(0) * dists_scaled["scale"].fillna(0))
+    nav_scaled = 0.0
+    nav_rows = cf.loc[cf["cat"] == "nav"].sort_values("date")
+    if not nav_rows.empty:
+        last_nav_row = nav_rows.iloc[-1]
+        nav_scaled = float((last_nav_row["amount"] or 0.0) * (last_nav_row["scale"] or 0.0))
+    # Denominator: positive magnitude of scaled calls
+    denom = float(-calls_scaled.sum())
+    numer = float(dists_scaled.sum() + nav_scaled)
     if denom == 0:
         return None
     return numer / denom
@@ -140,8 +147,16 @@ def _xnpv(rate: float, dates: list[pd.Timestamp], amounts: list[float]) -> float
 
 
 def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
+    # Guard trivial/invalid cases
+    if not dates or not amounts or len(dates) != len(amounts):
+        return None
+    if all(a == 0 for a in amounts):
+        return None
+    # Require at least one negative and one positive cash flow
+    if not (any(a < 0 for a in amounts) and any(a > 0 for a in amounts)):
+        return None
     # Newton-Raphson
-    rate = 0.15
+    rate = 0.10
     for _ in range(100):
         f = _xnpv(rate, dates, amounts)
         h = 1e-6
@@ -149,7 +164,9 @@ def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
         d = (f1 - f) / h
         if not np.isfinite(d) or abs(d) < 1e-12:
             break
-        new_rate = rate - f / d
+        step = f / d
+        # Dampen step to improve stability
+        new_rate = rate - max(min(step, 1.0), -1.0)
         if not np.isfinite(new_rate) or new_rate <= -0.999999:
             new_rate = (rate + max(-0.9, min(1.0, new_rate))) / 2
         if abs(new_rate - rate) < 1e-9:
@@ -250,7 +267,7 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
     irr_amounts = [float(x) for x in agg["flow"].tolist()]
     deal_irr = _xirr(irr_dates, irr_amounts)
 
-    # Index-equivalent IRR using scaled flows to last index level
+    # Index-equivalent IRR using scaled flows to last index level (exclude NAV except last date)
     idx_series = index_df.set_index("date")["close"].sort_index()
     last_level = float(idx_series.iloc[-1]) if len(idx_series) else np.nan
     if np.isfinite(last_level):
