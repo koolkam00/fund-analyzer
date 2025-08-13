@@ -447,11 +447,16 @@ if not out.empty:
 
     # Diagnostics per deal (optional)
     with st.expander("PME diagnostics (per deal)"):
-    deal_list = sorted(cf[["portfolio_company", "fund_name"]].drop_duplicates().apply(lambda r: f"{r['portfolio_company']} — {r['fund_name']}", axis=1).tolist())
-    sel_combo = st.selectbox("Select company — fund", deal_list)
-    if sel_combo:
-        name, fund = sel_combo.split(" — ", 1)
-        g = cf[(cf["portfolio_company"] == name) & (cf["fund_name"] == fund)].copy().sort_values("date")
+        deal_list = sorted(
+            cf[["portfolio_company", "fund_name"]]
+            .drop_duplicates()
+            .apply(lambda r: f"{r['portfolio_company']} — {r['fund_name']}", axis=1)
+            .tolist()
+        )
+        sel_combo = st.selectbox("Select company — fund", deal_list)
+        if sel_combo:
+            name, fund = sel_combo.split(" — ", 1)
+            g = cf[(cf["portfolio_company"] == name) & (cf["fund_name"] == fund)].copy().sort_values("date")
             idx_series = index_df.set_index("date")["close"].sort_index()
             # Map index level at or before date
             idx_vals = []
@@ -471,9 +476,16 @@ if not out.empty:
             denom = float(calls_scaled)
             numer = float(dists_scaled + nav_scaled)
             calc_kspme = (numer / denom) if denom and denom > 0 else np.nan
-            st.write(f"Computed KS-PME (diagnostic): {calc_kspme:.2f} | Denom (abs scaled calls): {denom:,.1f} | Numer (scaled dists + last scaled NAV): {numer:,.1f}")
+            st.write(
+                f"Computed KS-PME (diagnostic): {calc_kspme:.2f} | Denom (abs scaled calls): {denom:,.1f} | Numer (scaled dists + last scaled NAV): {numer:,.1f}"
+            )
             show_cols = ["date", "cat", "amount", "index_level", "scale", "scaled_amount"]
-            st.dataframe(g[show_cols].assign(date=lambda d: pd.to_datetime(d["date"]).dt.strftime("%b %d, %Y")).style.format({"amount": "{:,.1f}", "index_level": "{:,.2f}", "scale": "{:.4f}", "scaled_amount": "{:,.1f}"}), use_container_width=True)
+            st.dataframe(
+                g[show_cols]
+                .assign(date=lambda d: pd.to_datetime(d["date"]).dt.strftime("%b %d, %Y"))
+                .style.format({"amount": "{:,.1f}", "index_level": "{:,.2f}", "scale": "{:.4f}", "scaled_amount": "{:,.1f}"}),
+                use_container_width=True,
+            )
 
     # Visualization: KS-PME by company
     import plotly.express as px
