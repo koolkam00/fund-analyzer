@@ -213,18 +213,18 @@ def _xirr_bracket(dates: list[pd.Timestamp], amounts: list[float]) -> float | No
 
 
 def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
-    # Try numpy_financial if available
+    # Try pyxirr first (robust)
     try:
-        if npf is not None:
-            val = npf.xirr(amounts, dates)
+        if px_xirr is not None:
+            val = px_xirr([pd.to_datetime(d).date() for d in dates], amounts)
             if np.isfinite(val):
                 return float(val)
     except Exception:
         pass
-    # Try pyxirr if available
+    # Try numpy_financial if available
     try:
-        if px_xirr is not None:
-            val = px_xirr(dates, amounts)
+        if npf is not None:
+            val = npf.xirr(amounts, [pd.to_datetime(d).date() for d in dates])
             if np.isfinite(val):
                 return float(val)
     except Exception:
@@ -326,6 +326,17 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
     irr_dates = [pd.to_datetime(d).to_pydatetime() for d in agg["date"].tolist()]
     irr_amounts = [float(x) for x in agg["flow"].tolist()]
     deal_irr = _xirr(irr_dates, irr_amounts)
+    if deal_irr is None:
+        # Fallback to MOIC-based annualized return if IRR not solvable
+        first_dt = min(irr_dates) if irr_dates else None
+        last_dt = max(irr_dates) if irr_dates else None
+        duration_days = (last_dt - first_dt).days if first_dt and last_dt else None
+        if duration_days and duration_days > 0:
+            calls_sum_pos = float(-g_sorted.loc[g_sorted["cat"] == "call", "amount"].sum())
+            terminal = float(g_sorted.loc[g_sorted["cat"] == "dist", "amount"].sum()) + float(g_sorted.loc[g_sorted["cat"] == "nav", "amount"].tail(1).sum())
+            if calls_sum_pos > 0 and terminal > 0:
+                moic_tmp = terminal / calls_sum_pos
+                deal_irr = moic_tmp ** (365.2425 / duration_days) - 1
 
     # Index-equivalent IRR using scaled flows to last index level (exclude NAV except last date)
     idx_series = index_df.set_index("date")["close"].sort_index()
@@ -342,6 +353,17 @@ for deal, g in cf.groupby("portfolio_company", sort=False):
             scale = last_level / idx_val if np.isfinite(idx_val) and (idx_val > 0) else np.nan
             scaled.append(float(amt) * (scale if np.isfinite(scale) else 0.0))
         idx_irr = _xirr(irr_dates, scaled)
+        if idx_irr is None:
+            # Same fallback for index IRR
+            first_dt = min(irr_dates) if irr_dates else None
+            last_dt = max(irr_dates) if irr_dates else None
+            duration_days = (last_dt - first_dt).days if first_dt and last_dt else None
+            if duration_days and duration_days > 0:
+                calls_scaled_sum = -sum(a for a in scaled if a < 0)
+                terminal_scaled = sum(a for a in scaled if a > 0)
+                if calls_scaled_sum > 0 and terminal_scaled > 0:
+                    moic_scaled = terminal_scaled / calls_scaled_sum
+                    idx_irr = moic_scaled ** (365.2425 / duration_days) - 1
     else:
         idx_irr = None
 
