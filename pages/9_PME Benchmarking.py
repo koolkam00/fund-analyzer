@@ -240,8 +240,13 @@ for deal, g in cf.groupby("portfolio_company"):
     if np.isfinite(last_level):
         scaled = []
         for d, a, cat in zip(g_sorted["date"], g_sorted["amount"], g_sorted["cat"]):
-            idx = idx_series.reindex([d]).ffill().bfill().iloc[0] if len(idx_series) else np.nan
-            scale = last_level / idx if np.isfinite(idx) and idx not in (0, np.nan) else np.nan
+            # Get latest index level at or before date d
+            if len(idx_series):
+                upto = idx_series.loc[:d]
+                idx_val = float(upto.iloc[-1]) if not upto.empty else np.nan
+            else:
+                idx_val = np.nan
+            scale = last_level / idx_val if np.isfinite(idx_val) and (idx_val > 0) else np.nan
             if cat == "call":
                 scaled.append(-float(a) * (scale if np.isfinite(scale) else 0.0))
             elif cat == "dist" or cat == "nav":
