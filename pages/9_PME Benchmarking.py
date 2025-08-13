@@ -46,13 +46,22 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
     cols = list(df.columns)
     out = pd.DataFrame()
     def _parse_date_col(s: pd.Series) -> pd.Series:
-        # Try native parse
+        # Native parse first
         d = pd.to_datetime(s, errors="coerce")
-        # If many NaT and input looks numeric, treat as Excel serial dates
-        if (d.isna().mean() > 0.25) and (pd.api.types.is_numeric_dtype(s) or s.astype(str).str.fullmatch(r"\d+").mean() > 0):
-            numeric = pd.to_numeric(s, errors="coerce")
+        numeric = pd.to_numeric(s, errors="coerce")
+        is_num = numeric.notna().mean() > 0.5
+        if is_num:
+            # If native parse produced many 1969-1971 dates (epoch ns mis-parse), switch to Excel serial logic
+            years = d.dt.year.where(d.notna())
+            many_epoch = (d.notna().mean() > 0.5) and (years.between(1969, 1971).mean() > 0.5)
+            looks_excel_range = numeric.between(20000, 60000).mean() > 0.5
+            if many_epoch or looks_excel_range:
+                origin = pd.Timestamp("1899-12-30")
+                return origin + pd.to_timedelta(numeric, unit="D")
+        # If many NaT and mostly digits, also try Excel serial
+        if (d.isna().mean() > 0.5) and (s.astype(str).str.fullmatch(r"\d+").mean() > 0.5):
             origin = pd.Timestamp("1899-12-30")
-            d = origin + pd.to_timedelta(numeric, unit="D")
+            return origin + pd.to_timedelta(numeric, unit="D")
         return d
     if len(cols) >= 1:
         out["date"] = _parse_date_col(df.iloc[:, 0])
