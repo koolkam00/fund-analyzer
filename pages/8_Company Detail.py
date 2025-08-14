@@ -115,10 +115,37 @@ qp = st.query_params
 sel_company = st.session_state.get("detail_company") or qp.get("company")
 sel_fund = st.session_state.get("detail_fund") or qp.get("fund")
 
-# Fallback selector if not provided
-if not sel_company or not sel_fund:
+# Unified type-ahead selector: "Company — Fund"
+display_col = portfolio_header if portfolio_header in ops_df.columns else ("portfolio_company" if "portfolio_company" in ops_df.columns else None)
+if display_col and "fund_name" in ops_df.columns:
+    pair_df = ops_df[[display_col, "fund_name"]].copy()
+    pair_df[display_col] = pair_df[display_col].astype(str)
+    pair_df["fund_name"] = pair_df["fund_name"].astype(str)
+    label_series = pair_df[display_col] + " — " + pair_df["fund_name"]
+    labels = pd.unique(label_series).tolist()
+    # Determine default selection from session/query if available
+    default_label = None
+    if sel_company and sel_fund:
+        default_label = f"{sel_company} — {sel_fund}"
+    sel_label = st.selectbox(
+        "Select deal (Company — Fund)",
+        labels,
+        index=(labels.index(default_label) if default_label in labels else 0),
+    )
+    # Split back into components
+    if " — " in sel_label:
+        sel_company, sel_fund = sel_label.split(" — ", 1)
+    else:
+        # Fallback split if dash is different or missing
+        parts = sel_label.split("-", 1)
+        sel_company = parts[0].strip()
+        sel_fund = parts[1].strip() if len(parts) > 1 else ""
+    st.session_state["detail_company"] = sel_company
+    st.session_state["detail_fund"] = sel_fund
+else:
+    # Ultimate fallback to two selectors if required columns are missing
     st.info("Choose a company and fund to view details.")
-    companies = sorted(ops_df[portfolio_header].dropna().astype(str).unique().tolist()) if portfolio_header in ops_df.columns else []
+    companies = sorted(ops_df[display_col].dropna().astype(str).unique().tolist()) if display_col else []
     funds = sorted(ops_df["fund_name"].dropna().astype(str).unique().tolist()) if "fund_name" in ops_df.columns else []
     c1, c2 = st.columns(2)
     sel_company = c1.selectbox("Portfolio Company", companies)
