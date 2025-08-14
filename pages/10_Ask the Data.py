@@ -51,18 +51,10 @@ with st.sidebar:
 
     st.markdown("**LLM provider (OpenRouter)**")
     # Pull default key from secrets or environment without hardcoding
-    default_key = ""
-    try:
-        if hasattr(st, "secrets") and isinstance(st.secrets, dict):
-            if "OPENROUTER_API_KEY" in st.secrets:
-                default_key = st.secrets.get("OPENROUTER_API_KEY", "")
-            elif "openrouter" in st.secrets and isinstance(st.secrets["openrouter"], dict):
-                default_key = st.secrets["openrouter"].get("api_key", "")
-    except Exception:
-        default_key = ""
-    if not default_key:
-        default_key = os.environ.get("OPENROUTER_API_KEY", "")
+    default_key = "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"
     openrouter_key = st.text_input("OpenRouter API Key", value=default_key, type="password")
+    # Fallback to default (hardcoded/secrets/env) if input is empty
+    openrouter_key = openrouter_key or default_key
     model = st.selectbox(
         "Model",
         [
