@@ -111,6 +111,67 @@ def _load_ops_df() -> pd.DataFrame:
             ops_df["ownership_pct"] = pd.to_numeric(ops_df["kam_equity_entry"], errors="coerce") / pd.to_numeric(ops_df["equity_entry_total"], errors="coerce")
         else:
             ops_df["ownership_pct"] = np.nan
+        # Realized/Unrealized/Total MOIC
+        if {"proceeds", "invested"}.issubset(ops_df.columns):
+            ops_df["realized_moic"] = pd.to_numeric(ops_df["proceeds"], errors="coerce") / pd.to_numeric(ops_df["invested"], errors="coerce")
+        if {"current_value", "invested"}.issubset(ops_df.columns):
+            ops_df["unrealized_moic"] = pd.to_numeric(ops_df["current_value"], errors="coerce") / pd.to_numeric(ops_df["invested"], errors="coerce")
+        if {"proceeds", "current_value", "invested"}.issubset(ops_df.columns):
+            total_moic_calc = (pd.to_numeric(ops_df["proceeds"], errors="coerce") + pd.to_numeric(ops_df["current_value"], errors="coerce")) / pd.to_numeric(ops_df["invested"], errors="coerce")
+            # Only fill gross_moic if missing
+            if "gross_moic" not in ops_df.columns:
+                ops_df["gross_moic"] = total_moic_calc
+            else:
+                ops_df["gross_moic"] = pd.to_numeric(ops_df["gross_moic"], errors="coerce").fillna(total_moic_calc)
+        # Entry/Exit EBITDA margins and change
+        if {"entry_ebitda", "entry_revenue"}.issubset(ops_df.columns):
+            ops_df["entry_margin_pct"] = pd.to_numeric(ops_df["entry_ebitda"], errors="coerce") / pd.to_numeric(ops_df["entry_revenue"], errors="coerce")
+        if {"exit_ebitda", "exit_revenue"}.issubset(ops_df.columns):
+            ops_df["exit_margin_pct"] = pd.to_numeric(ops_df["exit_ebitda"], errors="coerce") / pd.to_numeric(ops_df["exit_revenue"], errors="coerce")
+        if {"entry_margin_pct", "exit_margin_pct"}.issubset(ops_df.columns):
+            ops_df["ebitda_margin_change_pct"] = pd.to_numeric(ops_df["exit_margin_pct"], errors="coerce") - pd.to_numeric(ops_df["entry_margin_pct"], errors="coerce")
+        # % of fund invested
+        if {"fund_name", "invested"}.issubset(ops_df.columns):
+            fund_tot = ops_df.groupby("fund_name")["invested"].transform(lambda s: pd.to_numeric(s, errors="coerce").sum())
+            ops_df["pct_of_fund_invested"] = pd.to_numeric(ops_df["invested"], errors="coerce") / fund_tot.replace({0: np.nan})
+
+    # Value creation components similar to Company Detail
+    try:
+        e0 = pd.to_numeric(ops_df.get("entry_ebitda"), errors="coerce")
+        e1 = pd.to_numeric(ops_df.get("exit_ebitda"), errors="coerce")
+        r0 = pd.to_numeric(ops_df.get("entry_revenue"), errors="coerce")
+        r1 = pd.to_numeric(ops_df.get("exit_revenue"), errors="coerce")
+        tev0 = pd.to_numeric(ops_df.get("entry_tev"), errors="coerce")
+        tev1 = pd.to_numeric(ops_df.get("exit_tev"), errors="coerce")
+        nd0 = pd.to_numeric(ops_df.get("entry_net_debt"), errors="coerce")
+        nd1 = pd.to_numeric(ops_df.get("exit_net_debt"), errors="coerce")
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mult0 = np.where(e0 > 0, tev0 / e0, np.nan)
+            mult1 = np.where(e1 > 0, tev1 / e1, np.nan)
+            marg0 = np.where(r0 > 0, e0 / r0, np.nan)
+            marg1 = np.where(r1 > 0, e1 / r1, np.nan)
+            mult0 = pd.Series(mult0).replace([np.inf, -np.inf], np.nan)
+            mult1 = pd.Series(mult1).replace([np.inf, -np.inf], np.nan)
+            marg0 = pd.Series(marg0).replace([np.inf, -np.inf], np.nan)
+            marg1 = pd.Series(marg1).replace([np.inf, -np.inf], np.nan)
+            rev_growth = (r1 - r0) * marg0 * mult0
+            margin_exp = r1 * (marg1 - marg0) * mult0
+            e1_safe = e1.where(e1 > 0)
+            multiple_change = (mult1 - mult0) * e1_safe
+            deleveraging = -(nd1 - nd0)
+            eq0 = tev0 - nd0
+            eq1 = tev1 - nd1
+            bridge_sum = rev_growth + margin_exp + multiple_change + deleveraging
+        ops_df["equity_entry"] = eq0
+        ops_df["equity_exit"] = eq1
+        ops_df["vc_rev_growth"] = rev_growth
+        ops_df["vc_margin_expansion"] = margin_exp
+        ops_df["vc_multiple_change"] = multiple_change
+        ops_df["vc_deleveraging"] = deleveraging
+        ops_df["vc_bridge_sum"] = bridge_sum
+    except Exception:
+        # If any required columns are missing, skip silently
+        pass
     return ops_df
 
 
