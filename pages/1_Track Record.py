@@ -162,6 +162,10 @@ if {"gross_irr", "invested"}.issubset(f.columns):
 
 overall_moic_str = f"{overall_moic:.1f}x" if pd.notna(overall_moic) else "—"
 wa_irr_overall_str = f"{wa_irr_overall:.1%}" if pd.notna(wa_irr_overall) else "—"
+overall_dpi = (overall_proc / overall_invest) if overall_invest else np.nan
+overall_rvpi = (overall_nav / overall_invest) if overall_invest else np.nan
+overall_dpi_str = f"{overall_dpi:.1f}x" if pd.notna(overall_dpi) else "—"
+overall_rvpi_str = f"{overall_rvpi:.1f}x" if pd.notna(overall_rvpi) else "—"
 
 summary_cols = [
     portfolio_header,
@@ -179,7 +183,9 @@ summary_cols = [
 ]
 summary_cols = [c for c in summary_cols if c in f.columns or c in [portfolio_header]]
 
-with st.expander(f"All Funds — Total • Invested: ${overall_invest:,.1f} | Realized: ${overall_proc:,.1f} | NAV: ${overall_nav:,.1f} | Total MOIC: {overall_moic_str} | WA Gross IRR: {wa_irr_overall_str}"):
+with st.expander(
+    f"All Funds — TVPI: {overall_moic_str} • DPI: {overall_dpi_str} • RVPI: {overall_rvpi_str} • Invested: ${overall_invest:,.1f} • Realized: ${overall_proc:,.1f} • NAV: ${overall_nav:,.1f} • WA IRR: {wa_irr_overall_str}"
+):
     overall_row = pd.DataFrame([
         {
             portfolio_header: "Total",
@@ -332,7 +338,13 @@ for fund, g in f.groupby("fund_name"):
 
     total_moic_str = f"{total_moic:.1f}" if pd.notna(total_moic) else "—"
     wa_irr_str = f"{wa_irr:.1%}" if pd.notna(wa_irr) else "—"
-    with st.expander(f"{fund} — Invested: ${fund_invest:,.1f} • Realized: ${fund_proceeds:,.1f} • NAV: ${fund_nav:,.1f} • MOIC: {total_moic_str} • WA Gross IRR: {wa_irr_str}"):
+    fund_dpi = (fund_proceeds / fund_invest) if fund_invest else np.nan
+    fund_rvpi = (fund_nav / fund_invest) if fund_invest else np.nan
+    fund_dpi_str = f"{fund_dpi:.1f}x" if pd.notna(fund_dpi) else "—"
+    fund_rvpi_str = f"{fund_rvpi:.1f}x" if pd.notna(fund_rvpi) else "—"
+    with st.expander(
+        f"{fund} — TVPI: {total_moic_str} • DPI: {fund_dpi_str} • RVPI: {fund_rvpi_str} • Invested: ${fund_invest:,.1f} • Realized: ${fund_proceeds:,.1f} • NAV: ${fund_nav:,.1f} • WA IRR: {wa_irr_str}"
+    ):
         # Top-level summary row
         summary = pd.DataFrame([
             {
