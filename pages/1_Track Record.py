@@ -183,9 +183,11 @@ summary_cols = [
 ]
 summary_cols = [c for c in summary_cols if c in f.columns or c in [portfolio_header]]
 
-with st.expander(
-    f"All Funds — TVPI: {overall_moic_str} • DPI: {overall_dpi_str} • RVPI: {overall_rvpi_str} • Invested: ${overall_invest:,.1f} • Realized: ${overall_proc:,.1f} • NAV: ${overall_nav:,.1f} • WA IRR: {wa_irr_overall_str}"
-):
+overall_header = (
+    f"All Funds - TVPI: {overall_moic_str} | DPI: {overall_dpi_str} | RVPI: {overall_rvpi_str} | "
+    f"Invested: ${overall_invest:,.1f} | Realized: ${overall_proc:,.1f} | NAV: ${overall_nav:,.1f} | WA IRR: {wa_irr_overall_str}"
+)
+with st.expander(overall_header):
     overall_row = pd.DataFrame([
         {
             portfolio_header: "Total",
@@ -342,9 +344,11 @@ for fund, g in f.groupby("fund_name"):
     fund_rvpi = (fund_nav / fund_invest) if fund_invest else np.nan
     fund_dpi_str = f"{fund_dpi:.1f}x" if pd.notna(fund_dpi) else "—"
     fund_rvpi_str = f"{fund_rvpi:.1f}x" if pd.notna(fund_rvpi) else "—"
-    with st.expander(
-        f"{fund} — TVPI: {total_moic_str} • DPI: {fund_dpi_str} • RVPI: {fund_rvpi_str} • Invested: ${fund_invest:,.1f} • Realized: ${fund_proceeds:,.1f} • NAV: ${fund_nav:,.1f} • WA IRR: {wa_irr_str}"
-    ):
+    fund_header = (
+        f"{fund} - TVPI: {total_moic_str} | DPI: {fund_dpi_str} | RVPI: {fund_rvpi_str} | "
+        f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f} | WA IRR: {wa_irr_str}"
+    )
+    with st.expander(fund_header):
         # Top-level summary row
         summary = pd.DataFrame([
             {
