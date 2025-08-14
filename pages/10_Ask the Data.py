@@ -13,7 +13,7 @@ import streamlit as st
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
 
 
-st.set_page_config(page_title="Ask Your Data (LLM)", layout="wide")
+st.set_page_config(page_title="Deal God", layout="wide")
 
 
 @st.cache_data(show_spinner=False)
@@ -37,7 +37,7 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
         return {sheet: xls.parse(sheet, header=header_zero) for sheet in xls.sheet_names}
 
 
-st.title("Ask Your Data (LLM)")
+st.title("Deal God")
 st.caption("Query your uploaded Portfolio Metrics using a language model. The model sees a compact summary + sample rows.")
 
 with st.sidebar:
