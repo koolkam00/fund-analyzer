@@ -63,6 +63,8 @@ with st.sidebar:
     if not default_key:
         default_key = os.environ.get("OPENROUTER_API_KEY", "")
     openrouter_key = st.text_input("OpenRouter API Key", value=default_key, type="password")
+    # Normalize pasted key (avoid leading/trailing spaces/newlines)
+    openrouter_key = (openrouter_key or "").strip()
     # Fallback to default (hardcoded/secrets/env) if input is empty
     openrouter_key = openrouter_key or default_key
     model = st.selectbox(
@@ -157,6 +159,9 @@ def _openrouter_chat(api_key: str, model: str, system_prompt: str, user_prompt: 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        # Recommended by OpenRouter for routing/limits; safe defaults for local/Cloud use
+        "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "http://localhost"),
+        "X-Title": os.environ.get("OPENROUTER_APP_TITLE", "PE Fund Analyzer"),
     }
     payload = {
         "model": model,
