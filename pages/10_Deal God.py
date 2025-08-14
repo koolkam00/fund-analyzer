@@ -68,15 +68,20 @@ with st.sidebar:
     # Fallback to default (hardcoded/secrets/env) if input is empty
     openrouter_key = openrouter_key or default_key
     model = st.selectbox(
-        "Model",
+        "Model (reasoning-focused at top)",
         [
+            "google/gemini-2.5-pro",
+            "anthropic/claude-3.5-sonnet",
+            "deepseek/deepseek-r1",
             "google/gemini-2.5-flash",
+            "meta-llama/llama-3.3-70b-instruct",
             "mistralai/mixtral-8x7b-instruct",
             "meta-llama/llama-3.1-8b-instruct",
             "google/gemma-2-9b-it",
         ],
         index=0,
     )
+    max_tokens = st.slider("Max tokens", min_value=512, max_value=8192, value=2048, step=256)
 
 
 def _load_ops_df() -> pd.DataFrame:
@@ -166,6 +171,7 @@ def _openrouter_chat(api_key: str, model: str, system_prompt: str, user_prompt: 
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.1,
+        "max_tokens": max_tokens,
     }
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
