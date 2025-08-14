@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+import os
 import requests
 import streamlit as st
 
@@ -49,7 +50,18 @@ with st.sidebar:
         header_row_index = st.number_input("Header row (1-based)", min_value=1, max_value=100, value=header_row_index, step=1)
 
     st.markdown("**LLM provider (OpenRouter)**")
-    default_key = st.secrets.get("OPENROUTER_API_KEY", "") if hasattr(st, "secrets") else ""
+    # Pull default key from secrets or environment without hardcoding
+    default_key = ""
+    try:
+        if hasattr(st, "secrets") and isinstance(st.secrets, dict):
+            if "OPENROUTER_API_KEY" in st.secrets:
+                default_key = st.secrets.get("OPENROUTER_API_KEY", "")
+            elif "openrouter" in st.secrets and isinstance(st.secrets["openrouter"], dict):
+                default_key = st.secrets["openrouter"].get("api_key", "")
+    except Exception:
+        default_key = ""
+    if not default_key:
+        default_key = os.environ.get("OPENROUTER_API_KEY", "")
     openrouter_key = st.text_input("OpenRouter API Key", value=default_key, type="password")
     model = st.selectbox(
         "Model",
