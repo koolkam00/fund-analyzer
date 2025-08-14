@@ -284,7 +284,16 @@ _download_template_button()
 
 with st.sidebar:
     upload = st.file_uploader("Upload cash flows (.xlsx or .csv) — columns: Date | Type | Value | Portfolio Company | Fund", type=["xlsx", "csv"])  # type: ignore
-    header_row_index = st.number_input("Header row (1-based)", min_value=1, max_value=100, value=1, step=1)
+    header_row_index = st.number_input(
+        "Header row (1-based)",
+        min_value=1,
+        max_value=100,
+        value=int(st.session_state.get("pme_header_row_index", 1)),
+        step=1,
+        key="pme_header_row_index_input",
+    )
+    # Persist header row selection in session state
+    st.session_state["pme_header_row_index"] = int(header_row_index)
     index_options = [
         "S&P 500 (\u005EGSPC)",
         "Nasdaq Composite (\u005EIXIC)",
@@ -304,9 +313,21 @@ with st.sidebar:
         "S&P Technology (XLK)",
         "S&P Utilities (XLU)",
     ]
-    index_choice = st.selectbox("Benchmark index", index_options)
+    prev_idx = st.session_state.get("pme_index_choice", index_options[0])
+    index_choice = st.selectbox(
+        "Benchmark index",
+        index_options,
+        index=(index_options.index(prev_idx) if prev_idx in index_options else 0),
+        key="pme_index_choice",
+    )
 
-raw_df = _read_excel_or_csv(upload, header_row_index)
+if upload is not None:
+    raw_df = _read_excel_or_csv(upload, header_row_index)
+    # Persist the loaded DataFrame for cross-page navigation
+    st.session_state["pme_raw_df"] = raw_df
+else:
+    raw_df = st.session_state.get("pme_raw_df", pd.DataFrame())
+
 if raw_df.empty:
     st.info("Upload a cash flow file to begin.")
     st.stop()
