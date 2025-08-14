@@ -97,40 +97,24 @@ def _load_ops_df() -> pd.DataFrame:
     ops_df_raw, _ = extract_operational_by_template_order(df, list(df.columns))
     if ops_df_raw.empty:
         return pd.DataFrame()
-    return add_growth_and_cagr(ops_df_raw)
+    ops_df = add_growth_and_cagr(ops_df_raw)
+    # Ensure ownership columns like in Track Record
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if "kam_ownership_exit_pct" in ops_df.columns:
+            ops_df["ownership_pct"] = pd.to_numeric(ops_df["kam_ownership_exit_pct"], errors="coerce")
+        elif {"kam_equity_entry", "equity_entry_total"}.issubset(ops_df.columns):
+            ops_df["ownership_pct"] = pd.to_numeric(ops_df["kam_equity_entry"], errors="coerce") / pd.to_numeric(ops_df["equity_entry_total"], errors="coerce")
+        else:
+            ops_df["ownership_pct"] = np.nan
+    return ops_df
 
 
 def _build_context(df: pd.DataFrame, max_rows: int = 200, pme_raw: Optional[pd.DataFrame] = None) -> Dict[str, object]:
-    # Keep a curated subset of columns that are most relevant
-    preferred_cols = [
-        "portfolio_company",
-        "fund_name",
-        "sector",
-        "geography",
-        "status",
-        "invest_date",
-        "exit_date",
-        "invested",
-        "proceeds",
-        "current_value",
-        "gross_moic",
-        "gross_irr",
-        "entry_revenue",
-        "exit_revenue",
-        "entry_ebitda",
-        "exit_ebitda",
-        "entry_net_debt",
-        "exit_net_debt",
-        "entry_tev",
-        "exit_tev",
-        "holding_years",
-        "revenue_cagr",
-        "ebitda_cagr",
-    ]
-    cols = [c for c in preferred_cols if c in df.columns]
+    # Include ALL available columns from the operational dataset
+    cols = [str(c) for c in df.columns]
     view = df[cols].copy()
     # Coerce datetimes to string for serialization
-    for dc in ["invest_date", "exit_date"]:
+    for dc in ["invest_date", "exit_date", "valuation_date"]:
         if dc in view.columns:
             view[dc] = pd.to_datetime(view[dc], errors="coerce").dt.strftime("%b %Y")
     # Basic summary for numeric columns
