@@ -70,6 +70,7 @@ with st.sidebar:
     model = st.selectbox(
         "Model",
         [
+            "google/gemini-2.5-flash",
             "mistralai/mixtral-8x7b-instruct",
             "meta-llama/llama-3.1-8b-instruct",
             "google/gemma-2-9b-it",
@@ -99,7 +100,7 @@ def _load_ops_df() -> pd.DataFrame:
     return add_growth_and_cagr(ops_df_raw)
 
 
-def _build_context(df: pd.DataFrame, max_rows: int = 200) -> Dict[str, object]:
+def _build_context(df: pd.DataFrame, max_rows: int = 200, pme_raw: Optional[pd.DataFrame] = None) -> Dict[str, object]:
     # Keep a curated subset of columns that are most relevant
     preferred_cols = [
         "portfolio_company",
@@ -146,12 +147,23 @@ def _build_context(df: pd.DataFrame, max_rows: int = 200) -> Dict[str, object]:
                 "max": float(s.max()),
             }
     sample = view.head(max_rows).fillna("")
-    return {
-        "columns": cols,
-        "summary": summary,
-        "rows_sample": json.loads(sample.to_json(orient="records")),
-        "row_count_total": int(len(view)),
+    ctx: Dict[str, object] = {
+        "ops_columns": cols,
+        "ops_summary": summary,
+        "ops_rows": json.loads(sample.to_json(orient="records")),
+        "ops_row_count_total": int(len(view)),
     }
+    # Include PME cash flow raw data if available
+    if pme_raw is not None and not pme_raw.empty:
+        # Coerce dates to string for serialization to avoid NaT issues
+        pme_ser = pme_raw.copy()
+        for c in pme_ser.columns:
+            if "date" in str(c).lower():
+                pme_ser[c] = pd.to_datetime(pme_ser[c], errors="coerce").dt.strftime("%Y-%m-%d")
+        ctx["pme_columns"] = [str(c) for c in pme_ser.columns]
+        ctx["pme_rows"] = json.loads(pme_ser.fillna("").to_json(orient="records"))
+        ctx["pme_row_count_total"] = int(len(pme_ser))
+    return ctx
 
 
 def _openrouter_chat(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -189,9 +201,15 @@ if ops_df.empty:
 
 st.success(f"Data loaded. Rows: {len(ops_df):,}")
 
-ctx = _build_context(ops_df, max_rows=200)
+all_rows = len(ops_df)
+ctx = _build_context(ops_df, max_rows=all_rows, pme_raw=None)
 with st.expander("Preview: sample rows used for the model context"):
-    st.json({"row_count_total": ctx["row_count_total"], "columns": ctx["columns"], "sample_rows": ctx["rows_sample"][:10]})
+    preview = {
+        "ops_row_count_total": ctx.get("ops_row_count_total"),
+        "ops_columns": ctx.get("ops_columns"),
+        "ops_sample_rows": (ctx.get("ops_rows") or [])[:10],
+    }
+    st.json(preview)
 
 st.subheader("Ask a question about your data")
 question = st.text_area("Question", placeholder="Examples: Which fund has the highest TVPI? What is the median EBITDA growth by sector?", height=100)
@@ -208,10 +226,12 @@ if btn:
         "Prefer numerical summaries (counts, sums, averages, medians) and include units (x for MOIC, % for IRR)."
     )
     user_prompt = (
-        "Data summary (JSON):\n" + json.dumps({"columns": ctx["columns"], "summary": ctx["summary"]}, ensure_ascii=False)
-        + "\n\nSample rows (JSON records):\n" + json.dumps(ctx["rows_sample"], ensure_ascii=False)[:15000]
-        + f"\n\nTotal rows: {ctx['row_count_total']}\n\nQuestion: {question}"
+        "Operational metrics summary (JSON):\n"
+        + json.dumps({"columns": ctx.get("ops_columns"), "summary": ctx.get("ops_summary")}, ensure_ascii=False)
+        + "\n\nOperational metrics rows (JSON records):\n"
+        + json.dumps(ctx.get("ops_rows"), ensure_ascii=False)
     )
+    user_prompt += f"\n\nQuestion: {question}"
 
     with st.spinner("Asking the model..."):
         answer = _openrouter_chat(openrouter_key, model, system_prompt, user_prompt)
