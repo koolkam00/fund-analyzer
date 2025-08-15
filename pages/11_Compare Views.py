@@ -6,6 +6,7 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
@@ -181,6 +182,23 @@ def _portfolio_vc_waterfall(frame: pd.DataFrame) -> go.Figure | None:
     return fig
 
 
+def _portfolio_vc_pie(frame: pd.DataFrame):
+    def _sum(series: pd.Series) -> float:
+        return float(pd.to_numeric(series, errors="coerce").sum(skipna=True))
+    rev = _sum(frame.get("vc_rev_growth", pd.Series(dtype=float)))
+    marg = _sum(frame.get("vc_margin_expansion", pd.Series(dtype=float)))
+    mult = _sum(frame.get("vc_multiple_change", pd.Series(dtype=float)))
+    debt = _sum(frame.get("vc_deleveraging", pd.Series(dtype=float)))
+    vals_abs = [abs(rev), abs(marg), abs(mult), abs(debt)]
+    if sum(v for v in vals_abs if np.isfinite(v)) <= 0:
+        return None
+    labels = ["Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging"]
+    fig = px.pie(names=labels, values=vals_abs, hole=0.4)
+    fig.update_traces(textposition="inside", texttemplate="%{percent:.1%}")
+    fig.update_layout(showlegend=True)
+    return fig
+
+
 portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
 if portfolio_header not in ops_df.columns and "portfolio_company" in ops_df.columns:
     ops_df.insert(0, portfolio_header, ops_df["portfolio_company"])  # ensure display col exists
@@ -279,8 +297,12 @@ with left:
     st.dataframe(_subtotals_table(f_left, portfolio_header), use_container_width=True, key="cmp_sub_left")
     st.markdown("**Value Creation (Portfolio)**")
     fig_l = _portfolio_vc_waterfall(f_left)
+    pie_l = _portfolio_vc_pie(f_left)
+    lc1, lc2 = st.columns(2)
     if fig_l is not None:
-        st.plotly_chart(fig_l, use_container_width=True, key="cmp_vc_left")
+        lc1.plotly_chart(fig_l, use_container_width=True, key="cmp_vc_left")
+    if pie_l is not None:
+        lc2.plotly_chart(pie_l, use_container_width=True, key="cmp_pie_left")
 
 with right:
     st.subheader("Right View")
@@ -291,7 +313,11 @@ with right:
     st.dataframe(_subtotals_table(f_right, portfolio_header), use_container_width=True, key="cmp_sub_right")
     st.markdown("**Value Creation (Portfolio)**")
     fig_r = _portfolio_vc_waterfall(f_right)
+    pie_r = _portfolio_vc_pie(f_right)
+    rc1, rc2 = st.columns(2)
     if fig_r is not None:
-        st.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")
+        rc1.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")
+    if pie_r is not None:
+        rc2.plotly_chart(pie_r, use_container_width=True, key="cmp_pie_right")
 
 
