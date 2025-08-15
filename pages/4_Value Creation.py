@@ -117,7 +117,7 @@ if {portfolio_header, "fund_name"}.issubset(view.columns):
         st.session_state["detail_company"] = parts[0]
         st.session_state["detail_fund"] = parts[1] if len(parts) > 1 else ""
         try:
-            st.switch_page("pages/8_Company Detail.py")
+            st.switch_page("pages/5_Company Detail.py")
         except Exception:
             pass
 
