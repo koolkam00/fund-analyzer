@@ -16,6 +16,16 @@ from filters import render_and_filter
 st.set_page_config(page_title="Compare Views", layout="wide")
 
 
+# Consistent color mapping for value creation pie charts across both panes
+VC_PIE_LABELS = ["Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging"]
+VC_PIE_COLOR_MAP = {
+    "Revenue Growth": "#1f77b4",   # blue
+    "Margin Expansion": "#2ca02c", # green
+    "Multiple Change": "#ff7f0e",  # orange
+    "Deleveraging": "#d62728",     # red
+}
+
+
 @st.cache_data(show_spinner=False)
 def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]:
     if upload is None:
@@ -192,8 +202,15 @@ def _portfolio_vc_pie(frame: pd.DataFrame):
     vals_abs = [abs(rev), abs(marg), abs(mult), abs(debt)]
     if sum(v for v in vals_abs if np.isfinite(v)) <= 0:
         return None
-    labels = ["Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging"]
-    fig = px.pie(names=labels, values=vals_abs, hole=0.4)
+    labels = VC_PIE_LABELS
+    # Use shared color mapping so left/right pies have identical colors
+    fig = px.pie(
+        names=labels,
+        values=vals_abs,
+        color=labels,
+        color_discrete_map=VC_PIE_COLOR_MAP,
+        hole=0.4,
+    )
     fig.update_traces(textposition="inside", texttemplate="%{percent:.1%}")
     fig.update_layout(showlegend=True)
     return fig
