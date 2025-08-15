@@ -617,6 +617,12 @@ def compute_value_creation(df: pd.DataFrame) -> pd.DataFrame:
     nd0 = pd.to_numeric(out.get("entry_net_debt"), errors="coerce")
     nd1 = pd.to_numeric(out.get("exit_net_debt"), errors="coerce")
 
+    # Validity: exclude any deal missing any required inputs
+    vc_valid = (
+        e0.notna() & e1.notna() & r0.notna() & r1.notna() &
+        tev0.notna() & tev1.notna() & nd0.notna() & nd1.notna()
+    )
+
     with np.errstate(divide="ignore", invalid="ignore"):
         mult0 = np.where(e0 > 0, tev0 / e0, np.nan)
         mult1 = np.where(e1 > 0, tev1 / e1, np.nan)
@@ -635,14 +641,15 @@ def compute_value_creation(df: pd.DataFrame) -> pd.DataFrame:
         multiple_change = (mult1 - mult0) * e1_safe
         deleveraging = -(nd1 - nd0)
 
-        # Replace non-finite contributions with 0 so portfolio-level sums are stable
+        # Mask out invalid rows entirely; keep contributions as NaN so they are excluded from sums
         for name, series in (
             ("rev_growth", rev_growth),
             ("margin_exp", margin_exp),
             ("multiple_change", multiple_change),
             ("deleveraging", deleveraging),
         ):
-            s = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0.0)
+            s = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
+            s = s.where(vc_valid, np.nan)
             if name == "rev_growth":
                 rev_growth = s
             elif name == "margin_exp":
@@ -652,8 +659,8 @@ def compute_value_creation(df: pd.DataFrame) -> pd.DataFrame:
             elif name == "deleveraging":
                 deleveraging = s
 
-        eq0 = pd.to_numeric(tev0, errors="coerce") - pd.to_numeric(nd0, errors="coerce")
-        eq1 = pd.to_numeric(tev1, errors="coerce") - pd.to_numeric(nd1, errors="coerce")
+        eq0 = (pd.to_numeric(tev0, errors="coerce") - pd.to_numeric(nd0, errors="coerce")).where(vc_valid, np.nan)
+        eq1 = (pd.to_numeric(tev1, errors="coerce") - pd.to_numeric(nd1, errors="coerce")).where(vc_valid, np.nan)
         eq_change = eq1 - eq0
 
         bridge_sum = rev_growth + margin_exp + multiple_change + deleveraging
@@ -666,5 +673,6 @@ def compute_value_creation(df: pd.DataFrame) -> pd.DataFrame:
     out["vc_multiple_change"] = multiple_change
     out["vc_deleveraging"] = deleveraging
     out["vc_bridge_sum"] = bridge_sum
+    out["vc_valid"] = vc_valid
     return out
 

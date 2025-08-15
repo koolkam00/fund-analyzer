@@ -37,9 +37,6 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
         return {sheet: xls.parse(sheet, header=header_zero) for sheet in xls.sheet_names}
 
 
-## Removed local compute_value_creation in favor of centralized version in analysis.py
-
-
 st.title("Value Creation Analysis")
 st.caption("Decompose change in equity value into Revenue Growth, Margin Expansion, Multiple Change, and Deleveraging.")
 
@@ -71,6 +68,8 @@ ops_df = compute_value_creation(ops_df)
 
 st.subheader("Filters")
 f = render_and_filter(ops_df, key_prefix="vc")
+# Only include deals with complete inputs for value creation
+f = f[f.get("vc_valid", True).astype(bool)]
 
 st.subheader("Deal value creation table")
 # Compute additional change columns for TEV and leverage
@@ -133,15 +132,19 @@ if {portfolio_header, "fund_name"}.issubset(view.columns):
 
 # Aggregated waterfall across all filtered deals
 st.subheader("Portfolio Waterfall (filtered)")
+
 def _sum_num(series: pd.Series) -> float:
     return float(pd.to_numeric(series, errors="coerce").sum(skipna=True))
 
-eq0_total = _sum_num(f.get("equity_entry", pd.Series(dtype=float)))
-rev_total = _sum_num(f.get("vc_rev_growth", pd.Series(dtype=float)))
-marg_total = _sum_num(f.get("vc_margin_expansion", pd.Series(dtype=float)))
-mult_total = _sum_num(f.get("vc_multiple_change", pd.Series(dtype=float)))
-debt_total = _sum_num(f.get("vc_deleveraging", pd.Series(dtype=float)))
-eq1_total = _sum_num(f.get("equity_exit", pd.Series(dtype=float)))
+# Exclude invalid rows for portfolio-level viz
+f_vc = f[f.get("vc_valid", True).astype(bool)]
+
+eq0_total = _sum_num(f_vc.get("equity_entry", pd.Series(dtype=float)))
+rev_total = _sum_num(f_vc.get("vc_rev_growth", pd.Series(dtype=float)))
+marg_total = _sum_num(f_vc.get("vc_margin_expansion", pd.Series(dtype=float)))
+mult_total = _sum_num(f_vc.get("vc_multiple_change", pd.Series(dtype=float)))
+debt_total = _sum_num(f_vc.get("vc_deleveraging", pd.Series(dtype=float)))
+eq1_total = _sum_num(f_vc.get("equity_exit", pd.Series(dtype=float)))
 
 fig_port = go.Figure(
     go.Waterfall(
@@ -162,18 +165,18 @@ fig_port = go.Figure(
 )
 fig_port.update_layout(showlegend=False, waterfallgap=0.3)
 
-fund = f.get("fund_name")
-moic = pd.to_numeric(f.get("gross_moic"), errors="coerce")
-irr = pd.to_numeric(f.get("gross_irr"), errors="coerce")
-status = f.get("status")
-sector = f.get("sector")
+fund = f_vc.get("fund_name")
+moic = pd.to_numeric(f_vc.get("gross_moic"), errors="coerce")
+irr = pd.to_numeric(f_vc.get("gross_irr"), errors="coerce")
+status = f_vc.get("status")
+sector = f_vc.get("sector")
 custom_port = np.column_stack([
-    fund.fillna("") if fund is not None else np.repeat("", len(f)),
-    moic.fillna(np.nan) if moic is not None else np.repeat(np.nan, len(f)),
-    irr.fillna(np.nan) if irr is not None else np.repeat(np.nan, len(f)),
-    status.fillna("") if status is not None else np.repeat("", len(f)),
-    sector.fillna("") if sector is not None else np.repeat("", len(f)),
-]) if len(f) > 0 else np.empty((0,5))
+    fund.fillna("") if fund is not None else np.repeat("", len(f_vc)),
+    moic.fillna(np.nan) if moic is not None else np.repeat(np.nan, len(f_vc)),
+    irr.fillna(np.nan) if irr is not None else np.repeat(np.nan, len(f_vc)),
+    status.fillna("") if status is not None else np.repeat("", len(f_vc)),
+    sector.fillna("") if sector is not None else np.repeat("", len(f_vc)),
+]) if len(f_vc) > 0 else np.empty((0,5))
 fig_port.update_traces(
     hovertemplate="<b>%{x}</b><br>Fund: %{customdata[0]}<br>MOIC: %{customdata[1]:.1f}<br>IRR: %{customdata[2]:.1%}<br>Status: %{customdata[3]}<br>Sector: %{customdata[4]}<extra></extra>",
     customdata=custom_port,
@@ -197,42 +200,43 @@ deal_names = view[label_col_unique].dropna().astype(str).unique().tolist() if la
 sel_deal = st.selectbox("Select deal", deal_names)
 if sel_deal:
     row = view.loc[view[label_col_unique] == sel_deal].iloc[0]
-    start = float(row.get("equity_entry", np.nan))
-    rev = float(row.get("vc_rev_growth", 0.0))
-    marg = float(row.get("vc_margin_expansion", 0.0))
-    mult = float(row.get("vc_multiple_change", 0.0))
-    debt = float(row.get("vc_deleveraging", 0.0))
-    end = float(row.get("equity_exit", np.nan))
+    # Skip invalid rows
+    if bool(row.get("vc_valid", True)):
+        start = float(row.get("equity_entry", np.nan))
+        rev = float(row.get("vc_rev_growth", 0.0))
+        marg = float(row.get("vc_margin_expansion", 0.0))
+        mult = float(row.get("vc_multiple_change", 0.0))
+        debt = float(row.get("vc_deleveraging", 0.0))
+        end = float(row.get("equity_exit", np.nan))
 
-    fig = go.Figure(
-        go.Waterfall(
-            orientation="v",
-            measure=["absolute", "relative", "relative", "relative", "relative", "total"],
-            x=["Equity at Entry", "Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging", "Equity at Exit"],
-            textposition="outside",
-            text=[f"{v:,.1f}" for v in [start, rev, marg, mult, debt, end]],
-            y=[start, rev, marg, mult, debt, end],
+        fig = go.Figure(
+            go.Waterfall(
+                orientation="v",
+                measure=["absolute", "relative", "relative", "relative", "relative", "total"],
+                x=["Equity at Entry", "Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging", "Equity at Exit"],
+                textposition="outside",
+                text=[f"{v:,.1f}" for v in [start, rev, marg, mult, debt, end]],
+                y=[start, rev, marg, mult, debt, end],
+            )
         )
-    )
-    fig.update_layout(showlegend=False, waterfallgap=0.3)
-    custom_deal = np.array([[row.get("fund_name", ""), row.get("gross_moic", np.nan), row.get("gross_irr", np.nan), row.get("status", ""), row.get("sector", "")]])
-    fig.update_traces(
-        hovertemplate="<b>%{x}</b><br>Fund: %{customdata[0]}<br>MOIC: %{customdata[1]:.1f}<br>IRR: %{customdata[2]:.1%}<br>Status: %{customdata[3]}<br>Sector: %{customdata[4]}<extra></extra>",
-        customdata=custom_deal,
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    deal_values_abs = [abs(rev), abs(marg), abs(mult), abs(debt)]
-    if sum(v for v in deal_values_abs if pd.notna(v)) > 0:
-        pie_deal = px.pie(
-            names=labels,
-            values=deal_values_abs,
-            title=f"Attribution Mix (%) – {sel_deal}",
-            hole=0.4,
+        fig.update_layout(showlegend=False, waterfallgap=0.3)
+        custom_deal = np.array([[row.get("fund_name", ""), row.get("gross_moic", np.nan), row.get("gross_irr", np.nan), row.get("status", ""), row.get("sector", "")]])
+        fig.update_traces(
+            hovertemplate="<b>%{x}</b><br>Fund: %{customdata[0]}<br>MOIC: %{customdata[1]:.1f}<br>IRR: %{customdata[2]:.1%}<br>Status: %{customdata[3]}<br>Sector: %{customdata[4]}<extra></extra>",
+            customdata=custom_deal,
         )
-        pie_deal.update_traces(textposition="inside", texttemplate="%{percent:.1%}")
-        st.plotly_chart(pie_deal, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
+        deal_values_abs = [abs(rev), abs(marg), abs(mult), abs(debt)]
+        if sum(v for v in deal_values_abs if pd.notna(v)) > 0:
+            pie_deal = px.pie(
+                names=labels,
+                values=deal_values_abs,
+                title=f"Attribution Mix (%) – {sel_deal}",
+                hole=0.4,
+            )
+            pie_deal.update_traces(textposition="inside", texttemplate="%{percent:.1%}")
+            st.plotly_chart(pie_deal, use_container_width=True)
 
 # Fund drop-down tables: company, cumulative growths, CAGRs, change in EBITDA margin
 st.subheader("Fund tables")

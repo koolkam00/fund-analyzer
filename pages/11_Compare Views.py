@@ -310,8 +310,10 @@ with left:
     st.markdown("**Subtotals**")
     st.dataframe(_subtotals_table(f_left, portfolio_header), use_container_width=True, height=200, key="cmp_sub_left")
     st.markdown("**Value Creation (Portfolio)**")
-    fig_l = _portfolio_vc_waterfall(f_left)
-    pie_l = _portfolio_vc_pie(f_left)
+    # Exclude deals missing required inputs for value creation visuals
+    vc_left = f_left[f_left.get("vc_valid", True).astype(bool)]
+    fig_l = _portfolio_vc_waterfall(vc_left)
+    pie_l = _portfolio_vc_pie(vc_left)
     lc1, lc2 = st.columns([2, 1])
     if fig_l is not None:
         lc1.plotly_chart(fig_l, use_container_width=True, key="cmp_vc_left")
@@ -326,8 +328,9 @@ with right:
     st.markdown("**Subtotals**")
     st.dataframe(_subtotals_table(f_right, portfolio_header), use_container_width=True, height=200, key="cmp_sub_right")
     st.markdown("**Value Creation (Portfolio)**")
-    fig_r = _portfolio_vc_waterfall(f_right)
-    pie_r = _portfolio_vc_pie(f_right)
+    vc_right = f_right[f_right.get("vc_valid", True).astype(bool)]
+    fig_r = _portfolio_vc_waterfall(vc_right)
+    pie_r = _portfolio_vc_pie(vc_right)
     rc1, rc2 = st.columns([2, 1])
     if fig_r is not None:
         rc1.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")

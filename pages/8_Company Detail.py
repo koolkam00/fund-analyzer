@@ -244,15 +244,16 @@ tbl2 = pd.DataFrame([{c: row_vals.get(c) for c in cols2}])
 fmt2 = {c: "{:.1f}" for c in tbl2.columns}
 st.dataframe(tbl2.style.format(fmt2), use_container_width=True)
 
-# Value creation waterfall for the deal, if available
+# Value creation waterfall for the deal, if available (exclude if invalid)
 st.subheader("Value Creation Waterfall")
+valid_row = bool(row.get("vc_valid", True))
 start = float(row.get("equity_entry", np.nan))
-rev = float(row.get("vc_rev_growth", 0.0))
-marg = float(row.get("vc_margin_expansion", 0.0))
-mult = float(row.get("vc_multiple_change", 0.0))
-debt = float(row.get("vc_deleveraging", 0.0))
+rev = float(row.get("vc_rev_growth", np.nan))
+marg = float(row.get("vc_margin_expansion", np.nan))
+mult = float(row.get("vc_multiple_change", np.nan))
+debt = float(row.get("vc_deleveraging", np.nan))
 end = float(row.get("equity_exit", np.nan))
-if pd.notna(start) and pd.notna(end):
+if valid_row and pd.notna(start) and pd.notna(end):
     fig = go.Figure(
         go.Waterfall(
             orientation="v",
