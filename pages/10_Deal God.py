@@ -10,7 +10,7 @@ import os
 import requests
 import streamlit as st
 
-from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from analysis import extract_operational_by_template_order, add_growth_and_cagr, compute_value_creation
 
 
 st.set_page_config(page_title="Deal God", layout="wide")
@@ -103,6 +103,8 @@ def _load_ops_df() -> pd.DataFrame:
     if ops_df_raw.empty:
         return pd.DataFrame()
     ops_df = add_growth_and_cagr(ops_df_raw)
+    # Centralized, robust value creation + derived flags (vc_valid)
+    ops_df = compute_value_creation(ops_df)
     # Ensure ownership columns like in Track Record
     with np.errstate(divide="ignore", invalid="ignore"):
         if "kam_ownership_exit_pct" in ops_df.columns:
@@ -135,48 +137,13 @@ def _load_ops_df() -> pd.DataFrame:
             fund_tot = ops_df.groupby("fund_name")["invested"].transform(lambda s: pd.to_numeric(s, errors="coerce").sum())
             ops_df["pct_of_fund_invested"] = pd.to_numeric(ops_df["invested"], errors="coerce") / fund_tot.replace({0: np.nan})
 
-    # Value creation components similar to Company Detail
-    try:
-        e0 = pd.to_numeric(ops_df.get("entry_ebitda"), errors="coerce")
-        e1 = pd.to_numeric(ops_df.get("exit_ebitda"), errors="coerce")
-        r0 = pd.to_numeric(ops_df.get("entry_revenue"), errors="coerce")
-        r1 = pd.to_numeric(ops_df.get("exit_revenue"), errors="coerce")
-        tev0 = pd.to_numeric(ops_df.get("entry_tev"), errors="coerce")
-        tev1 = pd.to_numeric(ops_df.get("exit_tev"), errors="coerce")
-        nd0 = pd.to_numeric(ops_df.get("entry_net_debt"), errors="coerce")
-        nd1 = pd.to_numeric(ops_df.get("exit_net_debt"), errors="coerce")
-        with np.errstate(divide="ignore", invalid="ignore"):
-            mult0 = np.where(e0 > 0, tev0 / e0, np.nan)
-            mult1 = np.where(e1 > 0, tev1 / e1, np.nan)
-            marg0 = np.where(r0 > 0, e0 / r0, np.nan)
-            marg1 = np.where(r1 > 0, e1 / r1, np.nan)
-            mult0 = pd.Series(mult0).replace([np.inf, -np.inf], np.nan)
-            mult1 = pd.Series(mult1).replace([np.inf, -np.inf], np.nan)
-            marg0 = pd.Series(marg0).replace([np.inf, -np.inf], np.nan)
-            marg1 = pd.Series(marg1).replace([np.inf, -np.inf], np.nan)
-            rev_growth = (r1 - r0) * marg0 * mult0
-            margin_exp = r1 * (marg1 - marg0) * mult0
-            e1_safe = e1.where(e1 > 0)
-            multiple_change = (mult1 - mult0) * e1_safe
-            deleveraging = -(nd1 - nd0)
-            eq0 = tev0 - nd0
-            eq1 = tev1 - nd1
-            bridge_sum = rev_growth + margin_exp + multiple_change + deleveraging
-        ops_df["equity_entry"] = eq0
-        ops_df["equity_exit"] = eq1
-        ops_df["vc_rev_growth"] = rev_growth
-        ops_df["vc_margin_expansion"] = margin_exp
-        ops_df["vc_multiple_change"] = multiple_change
-        ops_df["vc_deleveraging"] = deleveraging
-        ops_df["vc_bridge_sum"] = bridge_sum
-    except Exception:
-        # If any required columns are missing, skip silently
-        pass
+    # Multiples, leverage, TEV/Revenue, LTV, etc. are already computed in
+    # extract_operational_by_template_order; compute_value_creation adds VC fields.
     return ops_df
 
 
 def _build_context(df: pd.DataFrame, max_rows: int = 200, pme_raw: Optional[pd.DataFrame] = None) -> Dict[str, object]:
-    # Include ALL available columns from the operational dataset
+    # Include ALL available columns from the operational dataset (exclude PME for Deal God)
     cols = [str(c) for c in df.columns]
     view = df[cols].copy()
     # Coerce datetimes to string for serialization
@@ -203,16 +170,7 @@ def _build_context(df: pd.DataFrame, max_rows: int = 200, pme_raw: Optional[pd.D
         "ops_rows": json.loads(sample.to_json(orient="records")),
         "ops_row_count_total": int(len(view)),
     }
-    # Include PME cash flow raw data if available
-    if pme_raw is not None and not pme_raw.empty:
-        # Coerce dates to string for serialization to avoid NaT issues
-        pme_ser = pme_raw.copy()
-        for c in pme_ser.columns:
-            if "date" in str(c).lower():
-                pme_ser[c] = pd.to_datetime(pme_ser[c], errors="coerce").dt.strftime("%Y-%m-%d")
-        ctx["pme_columns"] = [str(c) for c in pme_ser.columns]
-        ctx["pme_rows"] = json.loads(pme_ser.fillna("").to_json(orient="records"))
-        ctx["pme_row_count_total"] = int(len(pme_ser))
+    # PME data intentionally excluded from AI context
     return ctx
 
 
