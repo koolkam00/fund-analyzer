@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -320,6 +320,73 @@ with left:
     if pie_l is not None:
         lc2.plotly_chart(pie_l, use_container_width=True, key="cmp_pie_left")
 
+    # Deal Charts: Entry vs Exit (mirror Deal Charts page)
+    st.markdown("**Deal Charts: Entry vs Exit**")
+    # Prepare frame: unique x label and margins, sort by EBITDA change like Deal Charts
+    x_label_col_left = f"{portfolio_header} (Fund)"
+    if portfolio_header in f_left.columns and "fund_name" in f_left.columns:
+        f_left[x_label_col_left] = f_left[portfolio_header].astype(str) + " — " + f_left["fund_name"].astype(str)
+    else:
+        f_left[x_label_col_left] = f_left.get(portfolio_header, pd.Series(dtype=str)).astype(str)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if {"entry_ebitda", "entry_revenue"}.issubset(f_left.columns):
+            f_left["entry_margin_pct"] = pd.to_numeric(f_left["entry_ebitda"], errors="coerce") / pd.to_numeric(f_left["entry_revenue"], errors="coerce")
+        if {"exit_ebitda", "exit_revenue"}.issubset(f_left.columns):
+            f_left["exit_margin_pct"] = pd.to_numeric(f_left["exit_ebitda"], errors="coerce") / pd.to_numeric(f_left["exit_revenue"], errors="coerce")
+    f_left["_sort_change_ebitda"] = pd.to_numeric(f_left.get("exit_ebitda"), errors="coerce") - pd.to_numeric(f_left.get("entry_ebitda"), errors="coerce")
+    f_left_sorted = f_left.sort_values("_sort_change_ebitda", ascending=False, na_position="last")
+    x_order_left = f_left_sorted[x_label_col_left].astype(str).tolist() if x_label_col_left in f_left_sorted.columns else []
+
+    def grouped_bar(df_in: pd.DataFrame, y_entry: str, y_exit: str, y_format: str, title: str, x_order: List[str], x_label_col: str, key: str):
+        x_vals = df_in[x_label_col].astype(str).tolist() if x_label_col in df_in.columns else list(range(len(df_in)))
+        y1 = pd.to_numeric(df_in.get(y_entry), errors="coerce")
+        y2 = pd.to_numeric(df_in.get(y_exit), errors="coerce")
+        df_plot = df_in.copy()
+        df_plot["y1"] = y1
+        df_plot["y2"] = y2
+        fig = go.Figure()
+        fund = df_plot.get("fund_name")
+        moic = pd.to_numeric(df_plot.get("gross_moic"), errors="coerce")
+        irr = pd.to_numeric(df_plot.get("gross_irr"), errors="coerce")
+        status = df_plot.get("status")
+        sector = df_plot.get("sector")
+        custom = np.column_stack([
+            fund.fillna("") if fund is not None else np.repeat("", len(df_plot)),
+            moic.fillna(np.nan) if moic is not None else np.repeat(np.nan, len(df_plot)),
+            irr.fillna(np.nan) if irr is not None else np.repeat(np.nan, len(df_plot)),
+            status.fillna("") if status is not None else np.repeat("", len(df_plot)),
+            sector.fillna("") if sector is not None else np.repeat("", len(df_plot)),
+        ]) if len(df_plot) > 0 else np.empty((0,5))
+        fig.add_bar(name="Entry", x=x_vals, y=df_plot["y1"], marker_color="#1f77b4")
+        fig.add_bar(name="Exit", x=x_vals, y=df_plot["y2"], marker_color="#ff7f0e")
+        fig.update_layout(
+            barmode="group",
+            title=title,
+            xaxis_title=x_label_col,
+            yaxis_title=y_entry.replace("entry_", "").replace("_", " ").title(),
+            xaxis_tickangle=-45,
+            legend_title_text="Point in Time",
+            margin=dict(t=60, r=20, b=80, l=60),
+            height=500,
+        )
+        if x_order:
+            fig.update_xaxes(categoryorder="array", categoryarray=x_order)
+        fig.update_yaxes(tickformat=y_format)
+        fig.update_traces(
+            hovertemplate="<b>%{x}</b><br>Fund: %{customdata[0]}<br>MOIC: %{customdata[1]:.1f}<br>IRR: %{customdata[2]:.1%}<br>Status: %{customdata[3]}<br>Sector: %{customdata[4]}<extra></extra>",
+            customdata=custom,
+        )
+        st.plotly_chart(fig, use_container_width=True, key=key)
+
+    grouped_bar(f_left_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_rev_left")
+    grouped_bar(f_left_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_ebitda_left")
+    grouped_bar(f_left_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_margin_left")
+    grouped_bar(f_left_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevebitda_left")
+    grouped_bar(f_left_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevrev_left")
+    grouped_bar(f_left_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_lev_left")
+    grouped_bar(f_left_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_nd_left")
+    grouped_bar(f_left_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tev_left")
+
 with right:
     st.subheader("Right View")
     f_right = render_and_filter(ops_df, key_prefix="cmp_right")
@@ -336,5 +403,30 @@ with right:
         rc1.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")
     if pie_r is not None:
         rc2.plotly_chart(pie_r, use_container_width=True, key="cmp_pie_right")
+
+    # Deal Charts: Entry vs Exit (mirror Deal Charts page)
+    st.markdown("**Deal Charts: Entry vs Exit**")
+    x_label_col_right = f"{portfolio_header} (Fund)"
+    if portfolio_header in f_right.columns and "fund_name" in f_right.columns:
+        f_right[x_label_col_right] = f_right[portfolio_header].astype(str) + " — " + f_right["fund_name"].astype(str)
+    else:
+        f_right[x_label_col_right] = f_right.get(portfolio_header, pd.Series(dtype=str)).astype(str)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if {"entry_ebitda", "entry_revenue"}.issubset(f_right.columns):
+            f_right["entry_margin_pct"] = pd.to_numeric(f_right["entry_ebitda"], errors="coerce") / pd.to_numeric(f_right["entry_revenue"], errors="coerce")
+        if {"exit_ebitda", "exit_revenue"}.issubset(f_right.columns):
+            f_right["exit_margin_pct"] = pd.to_numeric(f_right["exit_ebitda"], errors="coerce") / pd.to_numeric(f_right["exit_revenue"], errors="coerce")
+    f_right["_sort_change_ebitda"] = pd.to_numeric(f_right.get("exit_ebitda"), errors="coerce") - pd.to_numeric(f_right.get("entry_ebitda"), errors="coerce")
+    f_right_sorted = f_right.sort_values("_sort_change_ebitda", ascending=False, na_position="last")
+    x_order_right = f_right_sorted[x_label_col_right].astype(str).tolist() if x_label_col_right in f_right_sorted.columns else []
+
+    grouped_bar(f_right_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_rev_right")
+    grouped_bar(f_right_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_ebitda_right")
+    grouped_bar(f_right_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_margin_right")
+    grouped_bar(f_right_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevebitda_right")
+    grouped_bar(f_right_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevrev_right")
+    grouped_bar(f_right_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_lev_right")
+    grouped_bar(f_right_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_nd_right")
+    grouped_bar(f_right_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tev_right")
 
 
