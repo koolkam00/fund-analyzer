@@ -172,8 +172,16 @@ show_cols = [c for c in show_cols if c in df_out.columns]
 tbl = df_out[show_cols].copy()
 
 # Formatting
-fmt = {"fund_size": "{:,.1f}", "net_tvpi": "{:.1f}", "net_dpi": "{:.1f}", "net_irr": "{:.1%}"}
-st.dataframe(tbl.style.format(fmt, na_rep="—"), use_container_width=True)
+def _moic_fmt(v):
+    try:
+        return f"{float(v):.1f}x" if pd.notna(v) else "—"
+    except Exception:
+        return "—"
+fmt = {"fund_size": "{:,.1f}", "net_dpi": "{:.1f}", "net_irr": "{:.1%}"}
+sty = tbl.style.format(fmt, na_rep="—")
+if "net_tvpi" in tbl.columns:
+    sty = sty.format({"net_tvpi": _moic_fmt})
+st.dataframe(sty, use_container_width=True)
 
 # Summary counts by bucket
 st.subheader("Summary Counts by Bucket")
