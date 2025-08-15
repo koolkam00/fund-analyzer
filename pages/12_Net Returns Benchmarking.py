@@ -196,22 +196,27 @@ show_cols = [
 show_cols = [c for c in show_cols if c in df_out.columns]
 tbl = df_out[show_cols].copy()
 
-# Formatting
-def _moic_fmt(v):
+# Formatting (force string rendering for target columns to guarantee display)
+def _fmt_percent(v: float) -> str:
+    try:
+        return f"{float(v):.1%}" if pd.notna(v) else "—"
+    except Exception:
+        return "—"
+
+def _fmt_x(v: float) -> str:
     try:
         return f"{float(v):.1f}x" if pd.notna(v) else "—"
     except Exception:
         return "—"
-# Ensure IRR is clean decimal for display (coerce again in case merged duplicates)
-if "net_irr" in tbl.columns:
-    tbl["net_irr"] = pd.to_numeric(tbl["net_irr"], errors="coerce")
-fmt = {"fund_size": "{:,.1f}", "net_irr": "{:.1%}"}
-sty = tbl.style.format(fmt, na_rep="—")
-if "net_tvpi" in tbl.columns:
-    sty = sty.format({"net_tvpi": _moic_fmt})
-if "net_dpi" in tbl.columns:
-    sty = sty.format({"net_dpi": _moic_fmt})
-st.dataframe(sty, use_container_width=True)
+
+tbl_disp = tbl.copy()
+if "net_irr" in tbl_disp.columns:
+    tbl_disp["net_irr"] = pd.to_numeric(tbl_disp["net_irr"], errors="coerce").map(_fmt_percent)
+if "net_tvpi" in tbl_disp.columns:
+    tbl_disp["net_tvpi"] = pd.to_numeric(tbl_disp["net_tvpi"], errors="coerce").map(_fmt_x)
+if "net_dpi" in tbl_disp.columns:
+    tbl_disp["net_dpi"] = pd.to_numeric(tbl_disp["net_dpi"], errors="coerce").map(_fmt_x)
+st.dataframe(tbl_disp, use_container_width=True)
 
 ## Removed Summary Counts by Bucket per request
 
