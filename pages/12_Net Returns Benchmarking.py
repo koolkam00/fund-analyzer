@@ -213,7 +213,68 @@ if "net_dpi" in tbl.columns:
     sty = sty.format({"net_dpi": _moic_fmt})
 st.dataframe(sty, use_container_width=True)
 
-# Summary counts by bucket
 ## Removed Summary Counts by Bucket per request
+
+# Benchmark charts per metric with fund points overlaid
+st.subheader("Benchmark Charts with Fund Points")
+
+def _metric_chart(metric_key: str, title: str, is_percent: bool) -> None:
+    from plotly import graph_objects as go
+
+    bm_m = bm_valid[bm_valid["metric"] == metric_key].copy()
+    if bm_m.empty:
+        st.info(f"No benchmarks found for {title}.")
+        return
+    # Prepare thresholds by vintage
+    vintages = sorted(bm_m["vintage_year"].dropna().unique().tolist())
+    lq = []
+    med = []
+    uq = []
+    top5 = []
+    for vy in vintages:
+        row = bm_m.loc[bm_m["vintage_year"] == vy].iloc[0]
+        lq.append(float(pd.to_numeric(row.get("lower_quartile"), errors="coerce")))
+        med.append(float(pd.to_numeric(row.get("median"), errors="coerce")))
+        uq.append(float(pd.to_numeric(row.get("upper_quartile"), errors="coerce")))
+        top5.append(float(pd.to_numeric(row.get("top5%"), errors="coerce")))
+
+    fig = go.Figure()
+    fig.add_bar(name="Lower Quartile", x=vintages, y=lq, marker_color="#98df8a")
+    fig.add_bar(name="Median", x=vintages, y=med, marker_color="#1f77b4")
+    fig.add_bar(name="Upper Quartile", x=vintages, y=uq, marker_color="#ff7f0e")
+    fig.add_bar(name="Top 5%", x=vintages, y=top5, marker_color="#d62728")
+
+    # Overlay fund dots for this metric
+    funds_metric = df_out[["fund", "vintage_year", metric_key]].copy()
+    funds_metric = funds_metric.dropna(subset=["vintage_year", metric_key])
+    if not funds_metric.empty:
+        fig.add_scatter(
+            name="Funds",
+            x=funds_metric["vintage_year"],
+            y=funds_metric[metric_key],
+            mode="markers",
+            marker=dict(color="black", size=9, symbol="circle-open"),
+            text=funds_metric["fund"],
+            hovertemplate="Vintage %{x}<br>Fund: %{text}<br>Value: %{y}<extra></extra>",
+        )
+
+    fig.update_layout(
+        barmode="group",
+        title=title,
+        xaxis_title="Vintage Year",
+        legend_title_text="Benchmarks",
+        margin=dict(t=60, r=20, b=50, l=60),
+        height=500,
+    )
+    if is_percent:
+        fig.update_yaxes(title_text=title, tickformat=".1%")
+    else:
+        fig.update_yaxes(title_text=title, tickformat=".1f", ticksuffix="x")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+_metric_chart("net_irr", "Net IRR Benchmarks by Vintage", is_percent=True)
+_metric_chart("net_tvpi", "Net TVPI Benchmarks by Vintage", is_percent=False)
+_metric_chart("net_dpi", "Net DPI Benchmarks by Vintage", is_percent=False)
 
 
