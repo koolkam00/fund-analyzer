@@ -355,10 +355,7 @@ for fund, g in f.groupby("fund_name"):
                 parts2 = sel2.split(" — ", 1)
                 st.session_state["detail_company"] = parts2[0]
                 st.session_state["detail_fund"] = parts2[1] if len(parts2) > 1 else ""
-                try:
-                    st.switch_page("pages/8_Company Detail.py")
-                except Exception:
-                    pass
+                st.switch_page("Company Detail")
 
 
 # All Funds subtotals at bottom (not a dropdown)
