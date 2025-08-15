@@ -443,8 +443,17 @@ with left:
             rows.append({"Metric": label, "Avg Entry": avg_e, "Avg Exit": avg_x, "WA Entry": wa_e, "WA Exit": wa_x})
         return pd.DataFrame(rows)
     stats_left = _stats_table(f_left_sorted)
-    fmt_stats_left = {c: ("{:.1%}" if "Margin" in r["Metric"] else "{:,.1f}") for c in ["Avg Entry", "Avg Exit", "WA Entry", "WA Exit"] for _, r in stats_left.iterrows()}  # type: ignore
-    st.dataframe(stats_left.style.format({"Avg Entry": "{:,.1f}", "Avg Exit": "{:,.1f}", "WA Entry": "{:,.1f}", "WA Exit": "{:,.1f}"}), use_container_width=True, key="cmp_dc_stats_left")
+    # Format: default numeric with 1 decimal; EBITDA Margin rows as percent with 1 decimal
+    sleft = stats_left.set_index("Metric")
+    sty_left = sleft.style.format("{:,.1f}")
+    try:
+        sty_left = sty_left.format(
+            "{:.1%}",
+            subset=pd.IndexSlice[["EBITDA Margin"], ["Avg Entry", "Avg Exit", "WA Entry", "WA Exit"]],
+        )
+    except Exception:
+        pass
+    st.dataframe(sty_left, use_container_width=True, key="cmp_dc_stats_left")
 
 with right:
     st.subheader("Right View")
@@ -497,6 +506,15 @@ with right:
     # Summary stats (right)
     st.markdown("**Averages (Right)**")
     stats_right = _stats_table(f_right_sorted)
-    st.dataframe(stats_right.style.format({"Avg Entry": "{:,.1f}", "Avg Exit": "{:,.1f}", "WA Entry": "{:,.1f}", "WA Exit": "{:,.1f}"}), use_container_width=True, key="cmp_dc_stats_right")
+    sright = stats_right.set_index("Metric")
+    sty_right = sright.style.format("{:,.1f}")
+    try:
+        sty_right = sty_right.format(
+            "{:.1%}",
+            subset=pd.IndexSlice[["EBITDA Margin"], ["Avg Entry", "Avg Exit", "WA Entry", "WA Exit"]],
+        )
+    except Exception:
+        pass
+    st.dataframe(sty_right, use_container_width=True, key="cmp_dc_stats_right")
 
 
