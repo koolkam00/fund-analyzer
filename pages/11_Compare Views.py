@@ -337,13 +337,33 @@ with left:
     f_left_sorted = f_left.sort_values("_sort_change_ebitda", ascending=False, na_position="last")
     x_order_left = f_left_sorted[x_label_col_left].astype(str).tolist() if x_label_col_left in f_left_sorted.columns else []
 
-    def grouped_bar(df_in: pd.DataFrame, y_entry: str, y_exit: str, y_format: str, title: str, x_order: List[str], x_label_col: str, key: str):
+    def grouped_bar(
+        df_in: pd.DataFrame,
+        y_entry: str,
+        y_exit: str,
+        y_format: str,
+        title: str,
+        x_order: List[str],
+        x_label_col: str,
+        key: str,
+        exclude_outliers: bool = False,
+        low_pct: float = 1.0,
+        high_pct: float = 99.0,
+        y_range: tuple | None = None,
+    ):
         x_vals = df_in[x_label_col].astype(str).tolist() if x_label_col in df_in.columns else list(range(len(df_in)))
         y1 = pd.to_numeric(df_in.get(y_entry), errors="coerce")
         y2 = pd.to_numeric(df_in.get(y_exit), errors="coerce")
         df_plot = df_in.copy()
         df_plot["y1"] = y1
         df_plot["y2"] = y2
+        if exclude_outliers:
+            both = pd.concat([y1, y2]).dropna()
+            if not both.empty and both.size > 5:
+                q_low = both.quantile(low_pct / 100.0)
+                q_high = both.quantile(high_pct / 100.0)
+                mask = (df_plot["y1"].between(q_low, q_high)) & (df_plot["y2"].between(q_low, q_high))
+                df_plot = df_plot[mask]
         fig = go.Figure()
         fund = df_plot.get("fund_name")
         moic = pd.to_numeric(df_plot.get("gross_moic"), errors="coerce")
@@ -372,20 +392,59 @@ with left:
         if x_order:
             fig.update_xaxes(categoryorder="array", categoryarray=x_order)
         fig.update_yaxes(tickformat=y_format)
+        if y_range is not None:
+            try:
+                fig.update_yaxes(range=list(y_range))
+            except Exception:
+                pass
         fig.update_traces(
             hovertemplate="<b>%{x}</b><br>Fund: %{customdata[0]}<br>MOIC: %{customdata[1]:.1f}<br>IRR: %{customdata[2]:.1%}<br>Status: %{customdata[3]}<br>Sector: %{customdata[4]}<extra></extra>",
             customdata=custom,
         )
         st.plotly_chart(fig, use_container_width=True, key=key)
 
-    grouped_bar(f_left_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_rev_left")
-    grouped_bar(f_left_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_ebitda_left")
-    grouped_bar(f_left_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_margin_left")
-    grouped_bar(f_left_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevebitda_left")
-    grouped_bar(f_left_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevrev_left")
-    grouped_bar(f_left_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_lev_left")
-    grouped_bar(f_left_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_nd_left")
-    grouped_bar(f_left_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tev_left")
+    # Outlier controls (left)
+    ol1, ol2, ol3 = st.columns(3)
+    excl_left = ol1.checkbox("Exclude outliers (pct)", value=True, key="cmp_dc_excl_left")
+    low_left = ol2.number_input("Lower pct", min_value=0.0, max_value=50.0, value=1.0, step=0.5, key="cmp_dc_low_left")
+    high_left = ol3.number_input("Upper pct", min_value=50.0, max_value=100.0, value=99.0, step=0.5, key="cmp_dc_high_left")
+
+    grouped_bar(f_left_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_rev_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_ebitda_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_margin_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevebitda_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tevrev_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_lev_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_nd_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+    grouped_bar(f_left_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_left, x_label_col_left, key="cmp_dc_tev_left", exclude_outliers=excl_left, low_pct=low_left, high_pct=high_left)
+
+    # Summary stats (left): simple avg and weighted avg by invested
+    st.markdown("**Averages (Left)**")
+    def _stats_table(df_in: pd.DataFrame) -> pd.DataFrame:
+        metrics = [
+            ("Revenue", "entry_revenue", "exit_revenue"),
+            ("EBITDA", "entry_ebitda", "exit_ebitda"),
+            ("EBITDA Margin", "entry_margin_pct", "exit_margin_pct"),
+            ("TEV/EBITDA", "entry_tev_ebitda", "exit_tev_ebitda"),
+            ("TEV/Revenue", "entry_tev_revenue", "exit_tev_revenue"),
+            ("Leverage", "entry_leverage", "exit_leverage"),
+            ("Net Debt", "entry_net_debt", "exit_net_debt"),
+            ("TEV", "entry_tev", "exit_tev"),
+        ]
+        rows = []
+        w = pd.to_numeric(df_in.get("invested"), errors="coerce").clip(lower=0).fillna(0)
+        for label, e_col, x_col in metrics:
+            e = pd.to_numeric(df_in.get(e_col), errors="coerce")
+            x = pd.to_numeric(df_in.get(x_col), errors="coerce")
+            avg_e = e.mean(skipna=True)
+            avg_x = x.mean(skipna=True)
+            wa_e = float(np.average(e.fillna(0), weights=w)) if float(w.sum()) > 0 else np.nan
+            wa_x = float(np.average(x.fillna(0), weights=w)) if float(w.sum()) > 0 else np.nan
+            rows.append({"Metric": label, "Avg Entry": avg_e, "Avg Exit": avg_x, "WA Entry": wa_e, "WA Exit": wa_x})
+        return pd.DataFrame(rows)
+    stats_left = _stats_table(f_left_sorted)
+    fmt_stats_left = {c: ("{:.1%}" if "Margin" in r["Metric"] else "{:,.1f}") for c in ["Avg Entry", "Avg Exit", "WA Entry", "WA Exit"] for _, r in stats_left.iterrows()}  # type: ignore
+    st.dataframe(stats_left.style.format({"Avg Entry": "{:,.1f}", "Avg Exit": "{:,.1f}", "WA Entry": "{:,.1f}", "WA Exit": "{:,.1f}"}), use_container_width=True, key="cmp_dc_stats_left")
 
 with right:
     st.subheader("Right View")
@@ -420,13 +479,24 @@ with right:
     f_right_sorted = f_right.sort_values("_sort_change_ebitda", ascending=False, na_position="last")
     x_order_right = f_right_sorted[x_label_col_right].astype(str).tolist() if x_label_col_right in f_right_sorted.columns else []
 
-    grouped_bar(f_right_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_rev_right")
-    grouped_bar(f_right_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_ebitda_right")
-    grouped_bar(f_right_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_margin_right")
-    grouped_bar(f_right_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevebitda_right")
-    grouped_bar(f_right_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevrev_right")
-    grouped_bar(f_right_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_lev_right")
-    grouped_bar(f_right_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_nd_right")
-    grouped_bar(f_right_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tev_right")
+    # Outlier controls (right)
+    or1, or2, or3 = st.columns(3)
+    excl_right = or1.checkbox("Exclude outliers (pct)", value=True, key="cmp_dc_excl_right")
+    low_right = or2.number_input("Lower pct", min_value=0.0, max_value=50.0, value=1.0, step=0.5, key="cmp_dc_low_right")
+    high_right = or3.number_input("Upper pct", min_value=50.0, max_value=100.0, value=99.0, step=0.5, key="cmp_dc_high_right")
+
+    grouped_bar(f_right_sorted, "entry_revenue", "exit_revenue", ",.1f", "Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_rev_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_ebitda", "exit_ebitda", ",.1f", "EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_ebitda_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_margin_pct", "exit_margin_pct", ".1%", "EBITDA Margin: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_margin_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_tev_ebitda", "exit_tev_ebitda", ",.1f", "TEV/EBITDA: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevebitda_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tevrev_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_lev_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_nd_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+    grouped_bar(f_right_sorted, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order_right, x_label_col_right, key="cmp_dc_tev_right", exclude_outliers=excl_right, low_pct=low_right, high_pct=high_right)
+
+    # Summary stats (right)
+    st.markdown("**Averages (Right)**")
+    stats_right = _stats_table(f_right_sorted)
+    st.dataframe(stats_right.style.format({"Avg Entry": "{:,.1f}", "Avg Exit": "{:,.1f}", "WA Entry": "{:,.1f}", "WA Exit": "{:,.1f}"}), use_container_width=True, key="cmp_dc_stats_right")
 
 
