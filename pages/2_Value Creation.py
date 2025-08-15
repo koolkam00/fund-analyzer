@@ -115,14 +115,26 @@ st.subheader("Filters")
 f = render_and_filter(ops_df, key_prefix="vc")
 
 st.subheader("Deal value creation table")
+# Compute additional change columns for TEV and leverage
+with np.errstate(all='ignore'):
+    f["tev_change"] = pd.to_numeric(f.get("exit_tev"), errors="coerce") - pd.to_numeric(f.get("entry_tev"), errors="coerce")
+    f["leverage_change"] = pd.to_numeric(f.get("exit_leverage"), errors="coerce") - pd.to_numeric(f.get("entry_leverage"), errors="coerce")
 portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
 display_cols = [
     portfolio_header,
+    "status",
+    "holding_years",
     "fund_name",
     "sector",
     "geography",
     "invest_date",
     "exit_date",
+    "entry_tev",
+    "exit_tev",
+    "entry_leverage",
+    "exit_leverage",
+    "tev_change",
+    "leverage_change",
     "equity_entry",
     "equity_exit",
     "equity_change",
@@ -143,6 +155,7 @@ if portfolio_header in view.columns and "fund_name" in view.columns:
 else:
     view[label_col_unique] = view.get(portfolio_header, pd.Series(dtype=str)).astype(str)
 fmt = {col: "{:.1f}" for col in view.select_dtypes(include=["number"]).columns}
+# Percent formatting for leverage change is in turns of x, keep as numeric; dates below formatted elsewhere
 st.dataframe(view.style.format(fmt), use_container_width=True)
 
 # Quick navigation to Company Detail
@@ -293,6 +306,14 @@ if "fund_name" in f.columns:
         with st.expander(str(fund)):
             cols = [
                 portfolio_header,
+                "status",
+                "holding_years",
+                "entry_tev",
+                "exit_tev",
+                "entry_leverage",
+                "exit_leverage",
+                "tev_change",
+                "leverage_change",
                 "ebitda_growth_pct",
                 "ebitda_cagr",
                 "revenue_growth_pct",
