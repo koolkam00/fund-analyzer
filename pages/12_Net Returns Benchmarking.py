@@ -109,13 +109,23 @@ for c in ["net_tvpi", "net_dpi"]:
             errors="coerce",
         )
 
-# Clean Net IRR possibly provided as percent strings or 18 for 18%
+# Clean Net IRR possibly provided as strings like "18", "18%", "0.18", with commas/spaces
 if "net_irr" in df_funds.columns:
-    irr_clean = pd.to_numeric(
-        df_funds["net_irr"].astype(str).str.replace("%", "").str.strip(), errors="coerce"
+    irr_str = (
+        df_funds["net_irr"]
+        .astype(str)
+        .str.replace(
+            r"[^0-9.\-%]",
+            "",
+            regex=True,
+        )
+        .str.strip()
     )
-    # If values > 1 assume user provided percent (e.g., 18 => 18%) and scale to decimal
-    df_funds["net_irr"] = irr_clean.where(irr_clean <= 1.0, irr_clean / 100.0)
+    has_pct = irr_str.str.contains("%", regex=False)
+    irr_num = pd.to_numeric(irr_str.str.replace("%", ""), errors="coerce")
+    # Scale: if string had %, or if value > 1 (interpreted as percent), divide by 100
+    irr_scaled = irr_num.where(~(has_pct | (irr_num > 1.0)), irr_num / 100.0)
+    df_funds["net_irr"] = irr_scaled
 
 df_funds["vintage_year"] = pd.to_numeric(df_funds.get("vintage_year"), errors="coerce").astype("Int64")
 
@@ -192,7 +202,7 @@ def _moic_fmt(v):
         return f"{float(v):.1f}x" if pd.notna(v) else "—"
     except Exception:
         return "—"
-# Ensure IRR is clean decimal for display
+# Ensure IRR is clean decimal for display (coerce again in case merged duplicates)
 if "net_irr" in tbl.columns:
     tbl["net_irr"] = pd.to_numeric(tbl["net_irr"], errors="coerce")
 fmt = {"fund_size": "{:,.1f}", "net_irr": "{:.1%}"}
