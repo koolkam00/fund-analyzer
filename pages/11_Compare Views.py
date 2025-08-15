@@ -178,7 +178,7 @@ def _portfolio_vc_waterfall(frame: pd.DataFrame) -> go.Figure | None:
             y=[eq0, rev, marg, mult, debt, eq1],
         )
     )
-    fig.update_layout(showlegend=False, waterfallgap=0.3)
+    fig.update_layout(showlegend=False, waterfallgap=0.3, height=360)
     return fig
 
 
@@ -195,7 +195,7 @@ def _portfolio_vc_pie(frame: pd.DataFrame):
     labels = ["Revenue Growth", "Margin Expansion", "Multiple Change", "Deleveraging"]
     fig = px.pie(names=labels, values=vals_abs, hole=0.4)
     fig.update_traces(textposition="inside", texttemplate="%{percent:.1%}")
-    fig.update_layout(showlegend=True)
+    fig.update_layout(showlegend=True, height=300)
     return fig
 
 
@@ -286,7 +286,9 @@ def _subtotals_table(frame: pd.DataFrame, portfolio_header: str) -> pd.io.format
 
 with left:
     st.subheader("Left View")
-    f_left = render_and_filter(ops_df, key_prefix="cmp_left")
+    f_left = ops_df.copy()
+    with st.expander("Filters (Left)", expanded=False):
+        f_left = render_and_filter(ops_df, key_prefix="cmp_left")
     st.markdown("**Track Record**")
     # Fixed heights so charts below align across columns
     st.dataframe(_track_record_table(f_left, portfolio_header), use_container_width=True, height=420, key="cmp_tr_left")
@@ -303,7 +305,9 @@ with left:
 
 with right:
     st.subheader("Right View")
-    f_right = render_and_filter(ops_df, key_prefix="cmp_right")
+    f_right = ops_df.copy()
+    with st.expander("Filters (Right)", expanded=False):
+        f_right = render_and_filter(ops_df, key_prefix="cmp_right")
     st.markdown("**Track Record**")
     st.dataframe(_track_record_table(f_right, portfolio_header), use_container_width=True, height=420, key="cmp_tr_right")
     st.markdown("**Subtotals**")
