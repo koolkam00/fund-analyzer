@@ -24,16 +24,16 @@ def _template_excel() -> bytes:
             "Net DPI": [1.1, 0.6],
         }
     )
-    benchmarks = pd.DataFrame(
-        {
-            "Vintage Year": [2017, 2017, 2017, 2019, 2019, 2019],
-            "Metric": ["Net IRR", "Net TVPI", "Net DPI", "Net IRR", "Net TVPI", "Net DPI"],
-            "Top5%": [0.30, 2.5, 1.5],
-            "Upper Quartile": [0.20, 2.0, 1.0],
-            "Median": [0.15, 1.7, 0.7],
-            "Lower Quartile": [0.10, 1.4, 0.5],
-        }
-    )
+    # Build per-row thresholds to avoid unequal length errors
+    bm_rows = [
+        {"Vintage Year": 2017, "Metric": "Net IRR", "Top5%": 0.30, "Upper Quartile": 0.20, "Median": 0.15, "Lower Quartile": 0.10},
+        {"Vintage Year": 2017, "Metric": "Net TVPI", "Top5%": 2.50, "Upper Quartile": 2.00, "Median": 1.70, "Lower Quartile": 1.40},
+        {"Vintage Year": 2017, "Metric": "Net DPI", "Top5%": 1.50, "Upper Quartile": 1.00, "Median": 0.70, "Lower Quartile": 0.50},
+        {"Vintage Year": 2019, "Metric": "Net IRR", "Top5%": 0.28, "Upper Quartile": 0.18, "Median": 0.13, "Lower Quartile": 0.09},
+        {"Vintage Year": 2019, "Metric": "Net TVPI", "Top5%": 2.30, "Upper Quartile": 1.90, "Median": 1.60, "Lower Quartile": 1.30},
+        {"Vintage Year": 2019, "Metric": "Net DPI", "Top5%": 1.40, "Upper Quartile": 0.95, "Median": 0.65, "Lower Quartile": 0.45},
+    ]
+    benchmarks = pd.DataFrame(bm_rows)
     bio = io.BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         funds.to_excel(writer, index=False, sheet_name="Funds")
