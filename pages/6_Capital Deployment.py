@@ -72,11 +72,13 @@ ops_df["invest_date"] = pd.to_datetime(ops_df.get("invest_date"), errors="coerce
 ops_df["exit_date"] = pd.to_datetime(ops_df.get("exit_date"), errors="coerce")
 ops_df["year_invest"] = ops_df["invest_date"].dt.year
 ops_df["year_exit"] = ops_df["exit_date"].dt.year
-# New: determine realized year only when truly realized (not placeholder current month-end)
+# New: determine realized year only when truly realized AND the uploaded Exit Date exists
 ops_df["proceeds_num"] = pd.to_numeric(ops_df.get("proceeds"), errors="coerce")
 status_l = ops_df.get("status").astype(str).str.lower() if "status" in ops_df.columns else pd.Series("", index=ops_df.index)
 has_realization = (ops_df["proceeds_num"] > 0) | status_l.isin(["realized", "fully realized", "partially realized"])  # type: ignore
-ops_df["year_exit_real"] = np.where(has_realization, ops_df["exit_date"].dt.year, np.nan)
+# Use raw uploaded exit_date (pre add_growth fill) to avoid counting current month placeholders
+exit_date_raw = pd.to_datetime(ops_df_raw.get("exit_date"), errors="coerce")
+ops_df["year_exit_real"] = np.where(has_realization & exit_date_raw.notna(), exit_date_raw.dt.year, np.nan)
 
 st.subheader("Filters")
 c1, c2, c3 = st.columns(3)
