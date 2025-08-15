@@ -602,24 +602,6 @@ if not out.empty:
         fig_hist = px.histogram(viz_nonan, x="KS-PME", nbins=25)
         fig_hist.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
         fig_hist.update_layout(yaxis_title="Count")
-        # Over/Under summaries
-        over = viz_nonan[pd.to_numeric(viz_nonan["KS-PME"], errors="coerce") >= 1.0]
-        under = viz_nonan[pd.to_numeric(viz_nonan["KS-PME"], errors="coerce") < 1.0]
-        def _caps(df_part: pd.DataFrame) -> tuple[float, float, float, int]:
-            inv = float(pd.to_numeric(df_part.get("Invested Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
-            real = float(pd.to_numeric(df_part.get("Realized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
-            navv = float(pd.to_numeric(df_part.get("Unrealized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
-            cnt = int(df_part.shape[0])
-            return inv, navv, real, cnt
-        inv_o, nav_o, real_o, cnt_o = _caps(over)
-        inv_u, nav_u, real_u, cnt_u = _caps(under)
-        # Place summary annotations in paper coordinates to avoid reliance on internal trace arrays
-        fig_hist.add_annotation(xref="paper", yref="paper", x=0.75, y=1.05,
-                                text=f">=1: {cnt_o} deals | Invested ${inv_o:,.1f} | Realized ${real_o:,.1f} | NAV ${nav_o:,.1f}",
-                                showarrow=False, yanchor="bottom")
-        fig_hist.add_annotation(xref="paper", yref="paper", x=0.25, y=1.05,
-                                text=f"<1: {cnt_u} deals | Invested ${inv_u:,.1f} | Realized ${real_u:,.1f} | NAV ${nav_u:,.1f}",
-                                showarrow=False, yanchor="bottom")
         st.plotly_chart(fig_hist, use_container_width=True)
 
     # Portfolio summary: KS-PME, MOIC, IRR
@@ -653,6 +635,25 @@ if not out.empty:
     moic_str = f"{port_moic:.2f}" if pd.notna(port_moic) else "—"
     irr_str = f"{port_irr:.1%}" if port_irr is not None else "—"
     st.write(f"Portfolio KS-PME: {ks_str} | Portfolio MOIC: {moic_str} | Portfolio IRR: {irr_str}")
+    # KS-PME >= 1 vs < 1 breakout (counts and capital)
+    out_nonan = out.dropna(subset=["KS-PME"]).copy()
+    if not out_nonan.empty:
+        over = out_nonan[pd.to_numeric(out_nonan["KS-PME"], errors="coerce") >= 1.0]
+        under = out_nonan[pd.to_numeric(out_nonan["KS-PME"], errors="coerce") < 1.0]
+        def _caps(df_part: pd.DataFrame) -> tuple[float, float, float, int]:
+            inv = float(pd.to_numeric(df_part.get("Invested Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            real = float(pd.to_numeric(df_part.get("Realized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            navv = float(pd.to_numeric(df_part.get("Unrealized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            cnt = int(df_part.shape[0])
+            return inv, real, navv, cnt
+        inv_o, real_o, nav_o, cnt_o = _caps(over)
+        inv_u, real_u, nav_u, cnt_u = _caps(under)
+        st.caption(
+            f"KS-PME ≥ 1.0 — Deals: {cnt_o} | Invested: ${inv_o:,.1f} | Realized: ${real_o:,.1f} | NAV: ${nav_o:,.1f}"
+        )
+        st.caption(
+            f"KS-PME < 1.0 — Deals: {cnt_u} | Invested: ${inv_u:,.1f} | Realized: ${real_u:,.1f} | NAV: ${nav_u:,.1f}"
+        )
     # Segmented portfolio summary across statuses using 'out'
     if not out.empty and "Status" in out.columns:
         def _seg_port(name: str, df_deals: pd.DataFrame) -> str:
