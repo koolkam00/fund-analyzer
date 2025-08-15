@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from data_loader import ensure_workbook_loaded
 from filters import render_and_filter
 
 
@@ -38,27 +39,13 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 st.title("Track Record")
 st.caption("Grouped by fund. Expand a fund to view per-deal details; collapse to view totals.")
 
-with st.sidebar:
-    upload = st.file_uploader("Upload Portfolio Metrics file (.xlsx or .csv)", type=["xlsx", "csv"])  # type: ignore
-    header_row_index = st.number_input("Header row (1-based)", min_value=1, max_value=100, value=int(st.session_state.get("header_row_index", 2)), step=1)
-
-sheets = _read_excel_or_csv(upload, header_row_index)
+sheets, ops_sheet_name, _, _ = ensure_workbook_loaded()
 if not sheets:
-    sheets = st.session_state.get("sheets", {})
-if not sheets:
-    st.info("Upload a file to begin.")
+    st.info("Upload a workbook to begin.")
     st.stop()
-
-sheet_name = st.selectbox(
-    "Select sheet",
-    list(sheets.keys()),
-    index=max(0, list(sheets.keys()).index(st.session_state.get("selected_sheet", list(sheets.keys())[0])) if sheets else 0),
-)
+sheet_name = ops_sheet_name or list(sheets.keys())[0]
 df = sheets[sheet_name]
-st.caption(f"Loaded sheet '{sheet_name}' with rows: {len(df):,}")
-st.session_state["sheets"] = sheets
-st.session_state["selected_sheet"] = sheet_name
-st.session_state["header_row_index"] = header_row_index
+st.caption(f"Loaded workbook — operational sheet '{sheet_name}' with rows: {len(df):,}")
 
 # Build operating dataframe using fixed order mapping
 ops_df_raw, _ = extract_operational_by_template_order(df, list(df.columns))

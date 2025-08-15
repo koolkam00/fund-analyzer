@@ -64,20 +64,13 @@ st.download_button(
     use_container_width=True,
 )
 
-with st.sidebar:
-    upload = st.file_uploader("Upload Net Returns & Benchmarks (.xlsx)", type=["xlsx"])  # type: ignore
-
-sheets = _read_excel(upload)
+from data_loader import ensure_workbook_loaded
+sheets, _, funds_sheet_name, bench_sheet_name = ensure_workbook_loaded()
 if not sheets:
-    st.info("Upload the template with your data to begin.")
+    st.info("Upload a workbook to begin.")
     st.stop()
-
-# Expect two sheets: Funds and Benchmarks
-funds_sheet_name = "Funds" if "Funds" in sheets else list(sheets.keys())[0]
-bench_sheet_name = "Benchmarks" if "Benchmarks" in sheets else (list(sheets.keys())[1] if len(sheets) > 1 else None)
-if bench_sheet_name is None:
-    st.error("Could not find a 'Benchmarks' sheet. Include a second sheet with benchmark thresholds.")
-    st.stop()
+funds_sheet_name = funds_sheet_name or ("Funds" if "Funds" in sheets else list(sheets.keys())[1] if len(sheets) > 1 else list(sheets.keys())[0])
+bench_sheet_name = bench_sheet_name or ("Benchmarks" if "Benchmarks" in sheets else list(sheets.keys())[-1])
 
 df_funds = sheets[funds_sheet_name].copy()
 df_bm = sheets[bench_sheet_name].copy()
