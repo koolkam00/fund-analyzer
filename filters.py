@@ -8,13 +8,13 @@ import streamlit as st
 
 FILTER_FIELDS: List[Tuple[str, str]] = [
     ("fund_name", "Fund Name (GP)"),
-    ("fund_currency", "Fund Currency"),
+    # ("fund_currency", "Fund Currency"),  # removed per request
     ("cross_fund_investment", "Cross-Fund Investment"),
     ("geography", "Country (HQ)"),
     ("region", "Region of majority operations"),
     ("sector", "Kam Vertical"),
     ("vertical_description", "Vertical Description"),
-    ("company_currency", "Company Currency"),
+    # ("company_currency", "Company Currency"),  # removed per request
     ("investment_strategy", "Investment strategy"),
     ("instrument_type", "Instrument type"),
     ("public_private", "Public/ Private"),
