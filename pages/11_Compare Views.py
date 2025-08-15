@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 
-from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from analysis import extract_operational_by_template_order, add_growth_and_cagr, compute_value_creation
 from filters import render_and_filter
 
 
@@ -117,7 +117,7 @@ def _compute_value_creation_local(df: pd.DataFrame) -> pd.DataFrame:
     out["vc_bridge_sum"] = bridge_sum
     return out
 
-ops_df = _compute_value_creation_local(ops_df)
+ops_df = compute_value_creation(ops_df)
 
 
 def _track_record_table(frame: pd.DataFrame, portfolio_header: str) -> pd.io.formats.style.Styler:
