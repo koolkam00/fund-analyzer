@@ -54,13 +54,13 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 st.title("Company Detail")
 st.caption("Single-deal view for a selected Portfolio Company and Fund.")
 
- sheets, ops_sheet_name, _, _ = ensure_workbook_loaded()
- if not sheets:
-     st.info("Upload a workbook to begin.")
-     st.stop()
- sheet_name = ops_sheet_name or list(sheets.keys())[0]
- df = sheets[sheet_name]
- st.caption(f"Loaded workbook — operational sheet '{sheet_name}' with rows: {len(df):,}")
+sheets, ops_sheet_name, _, _ = ensure_workbook_loaded()
+if not sheets:
+    st.info("Upload a workbook to begin.")
+    st.stop()
+sheet_name = ops_sheet_name or list(sheets.keys())[0]
+df = sheets[sheet_name]
+st.caption(f"Loaded workbook — operational sheet '{sheet_name}' with rows: {len(df):,}")
 
 ops_df_raw, _ = extract_operational_by_template_order(df, list(df.columns))
 if ops_df_raw.empty:
