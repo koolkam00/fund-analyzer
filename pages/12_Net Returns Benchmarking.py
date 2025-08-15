@@ -214,26 +214,6 @@ if "net_dpi" in tbl.columns:
 st.dataframe(sty, use_container_width=True)
 
 # Summary counts by bucket
-st.subheader("Summary Counts by Bucket")
-def _bucket_counts(col: str) -> pd.DataFrame:
-    if col not in df_out.columns:
-        return pd.DataFrame()
-    return (
-        df_out[col]
-        .value_counts(dropna=False)
-        .rename_axis("Bucket")
-        .reset_index(name="Count")
-        .sort_values(by="Bucket")
-    )
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.markdown("**IRR**")
-    st.dataframe(_bucket_counts("IRR Bucket"), use_container_width=True)
-with c2:
-    st.markdown("**TVPI**")
-    st.dataframe(_bucket_counts("TVPI Bucket"), use_container_width=True)
-with c3:
-    st.markdown("**DPI**")
-    st.dataframe(_bucket_counts("DPI Bucket"), use_container_width=True)
+## Removed Summary Counts by Bucket per request
 
 
