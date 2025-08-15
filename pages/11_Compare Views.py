@@ -246,8 +246,6 @@ def _subtotals_table(frame: pd.DataFrame, portfolio_header: str) -> pd.io.format
         yrs_wa = float(np.average(yrs, weights=w)) if float(w.sum()) > 0 else np.nan
         return {
             portfolio_header: label,
-            "fund_name": "—",
-            "status": "—",
             "holding_years": yrs_wa,
             "invested": inv,
             "proceeds": real,
@@ -275,8 +273,6 @@ def _subtotals_table(frame: pd.DataFrame, portfolio_header: str) -> pd.io.format
     # Select display columns per request
     cols = [
         portfolio_header,
-        "fund_name",
-        "status",
         "holding_years",
         "invested",
         "proceeds",
