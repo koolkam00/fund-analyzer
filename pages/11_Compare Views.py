@@ -298,7 +298,7 @@ with left:
     st.markdown("**Value Creation (Portfolio)**")
     fig_l = _portfolio_vc_waterfall(f_left)
     pie_l = _portfolio_vc_pie(f_left)
-    lc1, lc2 = st.columns(2)
+    lc1, lc2 = st.columns([2, 1])
     if fig_l is not None:
         lc1.plotly_chart(fig_l, use_container_width=True, key="cmp_vc_left")
     if pie_l is not None:
@@ -314,7 +314,7 @@ with right:
     st.markdown("**Value Creation (Portfolio)**")
     fig_r = _portfolio_vc_waterfall(f_right)
     pie_r = _portfolio_vc_pie(f_right)
-    rc1, rc2 = st.columns(2)
+    rc1, rc2 = st.columns([2, 1])
     if fig_r is not None:
         rc1.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")
     if pie_r is not None:
