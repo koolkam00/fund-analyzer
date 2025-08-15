@@ -335,27 +335,7 @@ for fund, g in f.groupby("fund_name"):
         f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f} | WA IRR: {wa_irr_str}"
     )
     with st.expander(fund_header):
-        # Top-level summary row
-        summary = pd.DataFrame([
-            {
-                portfolio_header: "Total",
-                "sector": "—",
-                "status": "—",
-                "invest_date": pd.NaT,
-                "exit_date": pd.NaT,
-                "holding_years": np.nan,
-                "ownership_pct": np.nan,
-                "pct_of_fund_invested": 1.0 if fund_invest and fund_invest > 0 else np.nan,
-                "invested": fund_invest,
-                "proceeds": fund_proceeds,
-                "current_value": fund_nav,
-                "realized_moic": realized_moic,
-                "unrealized_moic": unrealized_moic,
-                "gross_moic": total_moic,
-                "gross_irr": np.nan,
-            }
-        ])
-        # Server-side sorting selector for per-fund table (sort only deal rows, keep summary on top)
+        # Server-side sorting selector for per-fund table (deal rows only)
         sleft, sright = st.columns([3,1])
         sortable_cols = [c for c in display_cols if c in rows.columns]
         sort_col = sleft.selectbox("Sort by", sortable_cols, index=0, key=f"tr_sort_col_{fund}")
@@ -370,12 +350,73 @@ for fund, g in f.groupby("fund_name"):
         else:
             if sort_col in rows_sorted.columns:
                 rows_sorted = rows_sorted.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
-        table = pd.concat([summary[display_cols], rows_sorted], ignore_index=True)
-        # Format date columns as Mon YYYY
+        table = rows_sorted
+        # Format date columns as Mon YYYY for deal rows
         for dc in ["invest_date", "exit_date"]:
             if dc in table.columns:
                 table[dc] = pd.to_datetime(table[dc], errors="coerce").dt.strftime("%b %Y")
         st.dataframe(_fmt(table), use_container_width=True)
+        # Subtotals by realization status with WA holding period by invested
+        proceeds_num_f = pd.to_numeric(g.get("proceeds"), errors="coerce").fillna(0)
+        nav_num_f = pd.to_numeric(g.get("current_value"), errors="coerce").fillna(0)
+        invested_num_f = pd.to_numeric(g.get("invested"), errors="coerce").fillna(0)
+        is_fully_realized_f = (nav_num_f <= 0) & (proceeds_num_f > 0)
+        is_partially_realized_f = (proceeds_num_f > 0) & (nav_num_f > 0)
+        is_unrealized_f = (proceeds_num_f <= 0) & (nav_num_f > 0)
+        def _subtotal_f(label: str, mask: pd.Series) -> dict:
+            sub = g[mask].copy()
+            inv = float(pd.to_numeric(sub.get("invested"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+            proc = float(pd.to_numeric(sub.get("proceeds"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+            navv = float(pd.to_numeric(sub.get("current_value"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+            invested_safe = inv if inv != 0 else np.nan
+            total_val = proc + navv
+            total_moic_sub = (total_val / invested_safe) if invested_safe else np.nan
+            realized_moic_sub = (proc / invested_safe) if invested_safe else np.nan
+            unrealized_moic_sub = (navv / invested_safe) if invested_safe else np.nan
+            # Weighted average IRR and holding years by invested
+            wa_irr_sub = np.nan
+            wa_hold_sub = np.nan
+            if not sub.empty and inv > 0:
+                w = pd.to_numeric(sub.get("invested"), errors="coerce").clip(lower=0).fillna(0)
+                if float(w.sum()) > 0:
+                    irr_vals = pd.to_numeric(sub.get("gross_irr"), errors="coerce").fillna(0)
+                    wa_irr_sub = float(np.average(irr_vals, weights=w))
+                    yrs = pd.to_numeric(sub.get("holding_years"), errors="coerce").fillna(0)
+                    wa_hold_sub = float(np.average(yrs, weights=w))
+            return {
+                portfolio_header: label,
+                "holding_years": wa_hold_sub,
+                "invested": inv,
+                "proceeds": proc,
+                "current_value": navv,
+                "total_value": total_val,
+                "realized_moic": realized_moic_sub,
+                "unrealized_moic": unrealized_moic_sub,
+                "gross_moic": total_moic_sub,
+                "gross_irr": wa_irr_sub,
+            }
+        sub_rows_f = [
+            _subtotal_f("Fully Realized", is_fully_realized_f),
+            _subtotal_f("Partially Realized", is_partially_realized_f),
+            _subtotal_f("Unrealized", is_unrealized_f),
+            _subtotal_f("Total", pd.Series(True, index=g.index)),
+        ]
+        sub_df_f = pd.DataFrame(sub_rows_f)
+        sub_cols = [
+            portfolio_header,
+            "holding_years",
+            "invested",
+            "proceeds",
+            "current_value",
+            "total_value",
+            "realized_moic",
+            "unrealized_moic",
+            "gross_moic",
+            "gross_irr",
+        ]
+        sub_df_f = sub_df_f[[c for c in sub_cols if c in sub_df_f.columns]]
+        st.caption("Subtotals by realization status")
+        st.dataframe(_fmt(sub_df_f), use_container_width=True)
         # Per-fund quick nav
         if {portfolio_header, "fund_name"}.issubset(rows.columns):
             c_navf1, c_navf2 = st.columns([3,1])
