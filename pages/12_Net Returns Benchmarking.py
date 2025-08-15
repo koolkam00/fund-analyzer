@@ -72,8 +72,8 @@ if not sheets:
 funds_sheet_name = funds_sheet_name or ("Funds" if "Funds" in sheets else list(sheets.keys())[1] if len(sheets) > 1 else list(sheets.keys())[0])
 bench_sheet_name = bench_sheet_name or ("Benchmarks" if "Benchmarks" in sheets else list(sheets.keys())[-1])
 
-df_funds = sheets[funds_sheet_name].copy()
-df_bm = sheets[bench_sheet_name].copy()
+df_funds = sheets.get(funds_sheet_name, sheets[list(sheets.keys())[1]]).copy()
+df_bm = sheets.get(bench_sheet_name, sheets[list(sheets.keys())[-1]]).copy()
 
 # Normalize columns
 def _norm(s: str) -> str:
@@ -84,6 +84,20 @@ df_bm.columns = [_norm(c) for c in df_bm.columns]
 
 required_funds = {"fund", "fund_size", "vintage_year", "net_irr", "net_tvpi", "net_dpi"}
 required_bm = {"vintage_year", "metric", "top5%", "upper_quartile", "median", "lower_quartile"}
+# Normalize common alternate spellings in benchmarks
+rename_map = {}
+for col in list(df_bm.columns):
+    c = str(col).strip().lower().replace(" ", "_")
+    if c in {"top_5%", "top5", "top_5"}:
+        rename_map[col] = "top5%"
+    elif c in {"upper_quartile", "upper_quartile_25%", "upper"}:
+        rename_map[col] = "upper_quartile"
+    elif c in {"median", "med"}:
+        rename_map[col] = "median"
+    elif c in {"lower_quartile", "lower"}:
+        rename_map[col] = "lower_quartile"
+if rename_map:
+    df_bm = df_bm.rename(columns=rename_map)
 if not required_funds.issubset(df_funds.columns):
     st.error(f"Funds sheet missing columns: {sorted(required_funds - set(df_funds.columns))}")
     st.stop()
@@ -123,22 +137,35 @@ if "net_irr" in df_funds.columns:
 df_funds["vintage_year"] = pd.to_numeric(df_funds.get("vintage_year"), errors="coerce").astype("Int64")
 
 df_bm["vintage_year"] = pd.to_numeric(df_bm["vintage_year"], errors="coerce").astype("Int64")
+if "metric" not in df_bm.columns:
+    # Try alternative header names
+    for alt in ["measure", "field", "kpi"]:
+        if alt in df_bm.columns:
+            df_bm = df_bm.rename(columns={alt: "metric"})
+            break
 df_bm["metric"] = df_bm["metric"].astype(str).str.strip().str.lower()
 
 # Map metric names to tokens used in funds
 metric_map = {
     "net irr": "net_irr",
+    "irr": "net_irr",
     "net_tvpi": "net_tvpi",
     "net tvpi": "net_tvpi",
+    "tvpi": "net_tvpi",
     "net_dpi": "net_dpi",
     "net dpi": "net_dpi",
+    "dpi": "net_dpi",
 }
 df_bm["metric"] = df_bm["metric"].map(lambda x: metric_map.get(x, x))
 
 # Build thresholds per (vintage_year, metric)
 key_cols = ["vintage_year", "metric"]
 thresh_cols = ["top5%", "upper_quartile", "median", "lower_quartile"]
-bm_valid = df_bm[key_cols + thresh_cols].dropna(subset=["vintage_year", "metric"])
+bm_valid = df_bm[key_cols + thresh_cols].copy()
+bm_valid = bm_valid.dropna(subset=["vintage_year", "metric"])
+for c in thresh_cols:
+    if c in bm_valid.columns:
+        bm_valid[c] = pd.to_numeric(bm_valid[c], errors="coerce")
 
 def classify(value: float, row: pd.Series) -> str:
     if pd.isna(value):
