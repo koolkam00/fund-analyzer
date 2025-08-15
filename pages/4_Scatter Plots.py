@@ -9,6 +9,7 @@ import plotly.express as px
 import streamlit as st
 
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from filters import render_and_filter
 
 
 st.set_page_config(page_title="Scatter Plots", layout="wide")
@@ -62,22 +63,7 @@ if ops_df_raw.empty:
     st.stop()
 
 ops_df = add_growth_and_cagr(ops_df_raw)
-
-flt_col1, flt_col2, flt_col3 = st.columns(3)
-sectors = sorted(ops_df["sector"].dropna().unique().tolist()) if "sector" in ops_df.columns else []
-funds = sorted(ops_df["fund_name"].dropna().unique().tolist()) if "fund_name" in ops_df.columns else []
-geos = sorted(ops_df["geography"].dropna().unique().tolist()) if "geography" in ops_df.columns else []
-sel_sector = flt_col1.multiselect("Sector", sectors, default=sectors)
-sel_fund = flt_col2.multiselect("Fund Name (GP)", funds, default=funds)
-sel_geo = flt_col3.multiselect("Geography", geos, default=geos)
-
-filtered = ops_df.copy()
-if sel_sector and "sector" in filtered.columns:
-    filtered = filtered[filtered["sector"].isin(sel_sector)]
-if sel_fund and "fund_name" in filtered.columns:
-    filtered = filtered[filtered["fund_name"].isin(sel_fund)]
-if sel_geo and "geography" in filtered.columns:
-    filtered = filtered[filtered["geography"].isin(sel_geo)]
+filtered = render_and_filter(ops_df, key_prefix="scat")
 
 metric_choices: List[str] = [
     "entry_revenue",
