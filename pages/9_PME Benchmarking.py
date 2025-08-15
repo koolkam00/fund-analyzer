@@ -264,14 +264,16 @@ st.markdown(
 def _download_template_button():
     example = pd.DataFrame(
         [
-            {"Date": pd.Timestamp("2020-01-15"), "Type": "Capital Call", "Value": 25.0, "Portfolio Company": "Alpha"},
-            {"Date": pd.Timestamp("2022-07-10"), "Type": "Distribution", "Value": 10.0, "Portfolio Company": "Alpha"},
-            {"Date": pd.Timestamp("2024-12-31"), "Type": "NAV", "Value": 20.0, "Portfolio Company": "Alpha"},
+            {"Date": pd.Timestamp("2020-01-15"), "Type": "Capital Call", "Value": 25.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
+            {"Date": pd.Timestamp("2022-07-10"), "Type": "Distribution", "Value": 10.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
+            {"Date": pd.Timestamp("2024-12-31"), "Type": "NAV", "Value": 20.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
         ]
     )
     bio = io.BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        example.to_excel(writer, index=False, sheet_name="CashFlows")
+        # Ensure Fund is in column E by specifying column order
+        cols = ["Date", "Type", "Value", "Portfolio Company", "Fund"]
+        example[cols].to_excel(writer, index=False, sheet_name="CashFlows")
     bio.seek(0)
     st.download_button(
         label="Download cash flow template (Excel)",
