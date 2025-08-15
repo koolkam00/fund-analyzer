@@ -304,21 +304,20 @@ def _neg_red(v):
 if "fund_name" in f.columns:
     for fund, g in f.groupby("fund_name"):
         with st.expander(str(fund)):
+            # Column order per request
             cols = [
                 portfolio_header,
                 "status",
                 "holding_years",
+                "revenue_growth_pct",
+                "revenue_cagr",
+                "ebitda_growth_pct",
+                "ebitda_cagr",
+                "ebitda_margin_change_pct",
                 "entry_tev",
                 "exit_tev",
                 "entry_leverage",
                 "exit_leverage",
-                "tev_change",
-                "leverage_change",
-                "ebitda_growth_pct",
-                "ebitda_cagr",
-                "revenue_growth_pct",
-                "revenue_cagr",
-                "ebitda_margin_change_pct",
             ]
             cols = [c for c in cols if c in g.columns or c == portfolio_header]
             tbl = g[cols].copy()
@@ -332,11 +331,15 @@ if "fund_name" in f.columns:
                 tbl = tbl.sort_values(by=sort_col, key=lambda s: pd.to_numeric(s, errors="coerce"), ascending=sort_asc, na_position="last")
             else:
                 tbl = tbl.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
-            # Format as %
+            # Format: percentages with one decimal; all other numerics one decimal
             fmt = {}
             for c in ["ebitda_growth_pct", "ebitda_cagr", "revenue_growth_pct", "revenue_cagr", "ebitda_margin_change_pct"]:
                 if c in tbl.columns:
                     fmt[c] = "{:.1%}"
+            for c in tbl.columns:
+                if c != portfolio_header and c not in fmt:
+                    # Numeric values to one decimal
+                    fmt[c] = "{:.1f}"
             # Build subtotal rows: Weighted Avg (by Invested), Average, Median, Max, Min
             agg_rows = []
             label_col = portfolio_header
