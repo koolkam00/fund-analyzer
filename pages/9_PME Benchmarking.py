@@ -437,9 +437,21 @@ for (deal, fund), g in cf.groupby(["portfolio_company", "fund_name"], sort=False
     hold_years = float(((last_cf - first_cf).days) / 365.2425) if pd.notna(first_cf) and pd.notna(last_cf) else np.nan
     realized_moic = (dists_sum / calls_sum) if calls_sum > 0 else np.nan
     unrealized_moic = (nav_last / calls_sum) if calls_sum > 0 else np.nan
+    # Deal status from realized/unrealized composition
+    status_str = "—"
+    if calls_sum > 0:
+        if nav_last <= 0 and dists_sum > 0:
+            status_str = "Fully Realized"
+        elif nav_last > 0 and dists_sum > 0:
+            status_str = "Partially Realized"
+        elif nav_last > 0 and (dists_sum <= 0 or pd.isna(dists_sum)):
+            status_str = "Unrealized"
+        else:
+            status_str = "Unrealized"
     rows.append({
         "Portfolio Company": deal,
         "Fund": fund,
+        "Status": status_str,
         "First Cash Flow": first_cf,
         "Last Cash Flow": last_cf,
         "Hold Period (yrs)": hold_years,
@@ -479,6 +491,7 @@ if not out.empty:
     desired_order = [
         "Portfolio Company",
         "Fund",
+        "Status",
         "First Cash Flow",
         "Last Cash Flow",
         "Hold Period (yrs)",
@@ -504,37 +517,58 @@ if not out.empty:
             st.dataframe(of[show_cols].style.format(fmt, na_rep="—"), use_container_width=True)
             # Fund summary
             cf_f = cf[cf["fund_name"] == fund]
-            fund_kspme = _ks_pme_index_multiple(cf_f, index_df)
-            calls_f = float(-cf_f.loc[cf_f["cat"] == "call", "amount"].sum())
-            dists_f = float(cf_f.loc[cf_f["cat"] == "dist", "amount"].sum())
-            nav_f = float(
-                cf_f[cf_f["cat"] == "nav"]
-                .sort_values(["portfolio_company", "date"])
-                .groupby("portfolio_company")["amount"].tail(1)
-                .sum()
-            )
-            moic_f = (dists_f + nav_f) / calls_f if calls_f > 0 else np.nan
-            # Fund IRR from aggregated flows (last NAV per deal)
-            flows_f = []
-            for _, gfund in cf_f.groupby(["portfolio_company", "fund_name"], sort=False):
-                g_sorted = gfund.sort_values("date")
-                if (g_sorted["cat"] == "nav").any():
-                    nav_date = g_sorted.loc[g_sorted["cat"] == "nav", "date"].max()
-                    g_use = g_sorted[(g_sorted["cat"] != "nav") | (g_sorted["date"] == nav_date)].copy()
+            # Segmented summaries by status
+            def _seg_summary(df_deals: pd.DataFrame, cf_scope: pd.DataFrame) -> tuple[str, str, str]:
+                if df_deals.empty:
+                    return "—", "—", "—"
+                deals_set = set(df_deals["Portfolio Company"].astype(str))
+                cf_seg = cf_scope[cf_scope["portfolio_company"].isin(deals_set)]
+                # KS-PME on flows subset
+                ksp = _ks_pme_index_multiple(cf_seg, index_df)
+                # MOIC
+                calls = float(-cf_seg.loc[cf_seg["cat"] == "call", "amount"].sum())
+                dists = float(cf_seg.loc[cf_seg["cat"] == "dist", "amount"].sum())
+                navv = float(
+                    cf_seg[cf_seg["cat"] == "nav"]
+                    .sort_values(["portfolio_company", "date"]) 
+                    .groupby("portfolio_company")["amount"].tail(1)
+                    .sum()
+                )
+                moic_val = (dists + navv) / calls if calls > 0 else np.nan
+                # IRR from aggregated flows
+                flows = []
+                for _, gfund in cf_seg.groupby(["portfolio_company"], sort=False):
+                    g_sorted = gfund.sort_values("date")
+                    if (g_sorted["cat"] == "nav").any():
+                        nav_date = g_sorted.loc[g_sorted["cat"] == "nav", "date"].max()
+                        g_use = g_sorted[(g_sorted["cat"] != "nav") | (g_sorted["date"] == nav_date)].copy()
+                    else:
+                        g_use = g_sorted.copy()
+                    flows.append(g_use[["date", "amount"]])
+                if flows:
+                    fl_df = pd.concat(flows, ignore_index=True).groupby("date", as_index=False)["amount"].sum().sort_values("date")
+                    f_dates = [pd.to_datetime(d).date() for d in fl_df["date"].tolist()]
+                    f_amts = [float(x) for x in fl_df["amount"].tolist()]
+                    irr_val = _xirr(f_dates, f_amts) if (any(a < 0 for a in f_amts) and any(a > 0 for a in f_amts)) else None
                 else:
-                    g_use = g_sorted.copy()
-                flows_f.append(g_use[["date", "amount"]])
-            if flows_f:
-                fl_df = pd.concat(flows_f, ignore_index=True).groupby("date", as_index=False)["amount"].sum().sort_values("date")
-                f_dates = [pd.to_datetime(d).date() for d in fl_df["date"].tolist()]
-                f_amts = [float(x) for x in fl_df["amount"].tolist()]
-                irr_f = _xirr(f_dates, f_amts) if (any(a < 0 for a in f_amts) and any(a > 0 for a in f_amts)) else None
-            else:
-                irr_f = None
-            ks_f = f"{fund_kspme:.2f}" if pd.notna(fund_kspme) else "—"
-            moic_f_str = f"{moic_f:.2f}" if pd.notna(moic_f) else "—"
-            irr_f_str = f"{irr_f:.1%}" if irr_f is not None else "—"
-            st.caption(f"Fund KS-PME: {ks_f} | Fund MOIC: {moic_f_str} | Fund IRR: {irr_f_str}")
+                    irr_val = None
+                return (
+                    f"{ksp:.2f}" if pd.notna(ksp) else "—",
+                    f"{moic_val:.2f}" if pd.notna(moic_val) else "—",
+                    f"{irr_val:.1%}" if irr_val is not None else "—",
+                )
+            # Build segments
+            segs = {
+                "Fully Realized": of[of["Status"] == "Fully Realized"],
+                "Partially Realized": of[of["Status"] == "Partially Realized"],
+                "Unrealized": of[of["Status"] == "Unrealized"],
+                "Total": of,
+            }
+            parts = []
+            for name, df_deals in segs.items():
+                ksp_s, moic_s, irr_s = _seg_summary(df_deals, cf_f)
+                parts.append(f"{name}: KS-PME {ksp_s} | MOIC {moic_s} | IRR {irr_s}")
+            st.caption(" | ".join(parts))
 
     # Charts: KS-PME by Portfolio Company and distribution
     import plotly.express as px
@@ -552,13 +586,35 @@ if not out.empty:
             category_orders={"Portfolio Company": viz["Portfolio Company"].tolist()},
         )
         fig_bar.add_hline(y=1.0, line_dash="dash", line_color="#7f7f7f")
+        # Add MOIC and IRR to hover
+        fig_bar.update_traces(
+            customdata=np.column_stack([
+                pd.to_numeric(viz.get("Total MOIC"), errors="coerce"),
+                pd.to_numeric(viz.get("IRR"), errors="coerce"),
+            ]),
+            hovertemplate="<b>%{x}</b><br>KS-PME: %{y:.2f}<br>Total MOIC: %{customdata[0]:.2f}<br>IRR: %{customdata[1]:.1%}<extra></extra>",
+        )
         fig_bar.update_layout(xaxis_tickangle=-45, yaxis_title="KS-PME", legend_title_text="Performance")
         st.plotly_chart(fig_bar, use_container_width=True)
 
         st.caption("Distribution of KS-PME")
-        fig_hist = px.histogram(viz.dropna(subset=["KS-PME"]), x="KS-PME", nbins=25)
+        viz_nonan = viz.dropna(subset=["KS-PME"]).copy()
+        fig_hist = px.histogram(viz_nonan, x="KS-PME", nbins=25)
         fig_hist.add_vline(x=1.0, line_dash="dash", line_color="#7f7f7f")
         fig_hist.update_layout(yaxis_title="Count")
+        # Over/Under summaries
+        over = viz_nonan[pd.to_numeric(viz_nonan["KS-PME"], errors="coerce") >= 1.0]
+        under = viz_nonan[pd.to_numeric(viz_nonan["KS-PME"], errors="coerce") < 1.0]
+        def _caps(df_part: pd.DataFrame) -> tuple[float, float, float, int]:
+            inv = float(pd.to_numeric(df_part.get("Invested Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            real = float(pd.to_numeric(df_part.get("Realized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            navv = float(pd.to_numeric(df_part.get("Unrealized Capital"), errors="coerce").sum()) if not df_part.empty else 0.0
+            cnt = int(df_part.shape[0])
+            return inv, navv, real, cnt
+        inv_o, nav_o, real_o, cnt_o = _caps(over)
+        inv_u, nav_u, real_u, cnt_u = _caps(under)
+        fig_hist.add_annotation(x=1.25, y=fig_hist.data[0]['y'].max() if len(fig_hist.data) else 0, text=f">=1: {cnt_o} deals | Invested ${inv_o:,.1f} | Realized ${real_o:,.1f} | NAV ${nav_o:,.1f}", showarrow=False, yanchor="bottom")
+        fig_hist.add_annotation(x=0.75, y=fig_hist.data[0]['y'].max() if len(fig_hist.data) else 0, text=f"<1: {cnt_u} deals | Invested ${inv_u:,.1f} | Realized ${real_u:,.1f} | NAV ${nav_u:,.1f}", showarrow=False, yanchor="bottom")
         st.plotly_chart(fig_hist, use_container_width=True)
 
     # Portfolio summary: KS-PME, MOIC, IRR
@@ -592,6 +648,44 @@ if not out.empty:
     moic_str = f"{port_moic:.2f}" if pd.notna(port_moic) else "—"
     irr_str = f"{port_irr:.1%}" if port_irr is not None else "—"
     st.write(f"Portfolio KS-PME: {ks_str} | Portfolio MOIC: {moic_str} | Portfolio IRR: {irr_str}")
+    # Segmented portfolio summary across statuses using 'out'
+    if not out.empty and "Status" in out.columns:
+        def _seg_port(name: str, df_deals: pd.DataFrame) -> str:
+            deals_set = set(df_deals["Portfolio Company"].astype(str))
+            cf_seg = cf[cf["portfolio_company"].isin(deals_set)]
+            ksp = _ks_pme_index_multiple(cf_seg, index_df)
+            calls = float(-cf_seg.loc[cf_seg["cat"] == "call", "amount"].sum())
+            dists = float(cf_seg.loc[cf_seg["cat"] == "dist", "amount"].sum())
+            navv = float(cf_seg[cf_seg["cat"] == "nav"].sort_values(["portfolio_company", "date"]).groupby("portfolio_company")["amount"].tail(1).sum())
+            moic_val = (dists + navv) / calls if calls > 0 else np.nan
+            # IRR
+            flows = []
+            for _, gseg in cf_seg.groupby(["portfolio_company"], sort=False):
+                g_sorted = gseg.sort_values("date")
+                if (g_sorted["cat"] == "nav").any():
+                    nav_date = g_sorted.loc[g_sorted["cat"] == "nav", "date"].max()
+                    g_use = g_sorted[(g_sorted["cat"] != "nav") | (g_sorted["date"] == nav_date)].copy()
+                else:
+                    g_use = g_sorted.copy()
+                flows.append(g_use[["date", "amount"]])
+            if flows:
+                fl_df = pd.concat(flows, ignore_index=True).groupby("date", as_index=False)["amount"].sum().sort_values("date")
+                f_dates = [pd.to_datetime(d).date() for d in fl_df["date"].tolist()]
+                f_amts = [float(x) for x in fl_df["amount"].tolist()]
+                irr_val = _xirr(f_dates, f_amts) if (any(a < 0 for a in f_amts) and any(a > 0 for a in f_amts)) else None
+            else:
+                irr_val = None
+            return f"{name}: KS-PME {ksp:.2f} | MOIC {moic_val:.2f} | IRR {irr_val:.1%}" if pd.notna(ksp) else f"{name}: KS-PME — | MOIC {moic_val:.2f if pd.notna(moic_val) else float('nan')} | IRR {'—' if irr_val is None else f'{irr_val:.1%}'}"
+        segs_port = {
+            "Fully Realized": out[out["Status"] == "Fully Realized"],
+            "Partially Realized": out[out["Status"] == "Partially Realized"],
+            "Unrealized": out[out["Status"] == "Unrealized"],
+            "Total": out,
+        }
+        lines = []
+        for name, df_deals in segs_port.items():
+            lines.append(_seg_port(name, df_deals))
+        st.caption(" | ".join(lines))
 
     # Per-deal diagnostics and charts removed per request
 else:
