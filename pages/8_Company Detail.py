@@ -14,6 +14,20 @@ from analysis import extract_operational_by_template_order, add_growth_and_cagr
 
 st.set_page_config(page_title="Company Detail", layout="wide")
 
+# Allow metric labels/values to wrap instead of showing ellipses
+st.markdown(
+    """
+    <style>
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        text-overflow: clip !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_data(show_spinner=False)
 def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]:
