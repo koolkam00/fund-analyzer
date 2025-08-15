@@ -187,11 +187,96 @@ if portfolio_header not in ops_df.columns and "portfolio_company" in ops_df.colu
 
 left, right = st.columns(2)
 
+
+def _status_bucket_row(row: pd.Series) -> str:
+    invested = float(pd.to_numeric(row.get("invested"), errors="coerce") or 0.0)
+    proceeds = float(pd.to_numeric(row.get("proceeds"), errors="coerce") or 0.0)
+    nav = float(pd.to_numeric(row.get("current_value"), errors="coerce") or 0.0)
+    if invested <= 0:
+        return "Unrealized"
+    if nav <= 0 and proceeds > 0:
+        return "Fully Realized"
+    if nav > 0 and proceeds > 0:
+        return "Partially Realized"
+    if nav > 0 and proceeds <= 0:
+        return "Unrealized"
+    return str(row.get("status", "")).strip() or "Unrealized"
+
+
+def _subtotals_table(frame: pd.DataFrame, portfolio_header: str) -> pd.io.formats.style.Styler:
+    dfp = frame.copy()
+    # Ensure numeric
+    for c in ["invested", "proceeds", "current_value", "gross_moic", "gross_irr", "holding_years"]:
+        if c in dfp.columns:
+            dfp[c] = pd.to_numeric(dfp[c], errors="coerce")
+    # Bucket
+    dfp["_bucket"] = dfp.apply(_status_bucket_row, axis=1)
+    # Compute totals per bucket
+    rows = []
+    def _row_for(label: str, sub: pd.DataFrame) -> dict:
+        inv = float(sub.get("invested", pd.Series(dtype=float)).sum(skipna=True))
+        real = float(sub.get("proceeds", pd.Series(dtype=float)).sum(skipna=True))
+        nav = float(sub.get("current_value", pd.Series(dtype=float)).sum(skipna=True))
+        total_val = real + nav
+        moic = (total_val / inv) if inv > 0 else np.nan
+        # Weighted avg IRR by invested
+        w = pd.to_numeric(sub.get("invested", pd.Series(dtype=float)), errors="coerce").clip(lower=0).fillna(0)
+        irr_vals = pd.to_numeric(sub.get("gross_irr", pd.Series(dtype=float)), errors="coerce").fillna(0)
+        irr_wa = float(np.average(irr_vals, weights=w)) if float(w.sum()) > 0 else np.nan
+        # Weighted avg holding years by invested
+        yrs = pd.to_numeric(sub.get("holding_years", pd.Series(dtype=float)), errors="coerce").fillna(0)
+        yrs_wa = float(np.average(yrs, weights=w)) if float(w.sum()) > 0 else np.nan
+        return {
+            portfolio_header: label,
+            "fund_name": "—",
+            "status": "—",
+            "holding_years": yrs_wa,
+            "invested": inv,
+            "proceeds": real,
+            "current_value": nav,
+            "total_value": total_val,
+            "gross_moic": moic,
+            "gross_irr": irr_wa,
+        }
+    # Buckets and total
+    buckets = ["Fully Realized", "Partially Realized", "Unrealized"]
+    for b in buckets:
+        rows.append(_row_for(b, dfp[dfp["_bucket"] == b]))
+    rows.append(_row_for("Total", dfp))
+    out = pd.DataFrame(rows)
+    # Format
+    fmt = {
+        "holding_years": "{:.1f}",
+        "invested": "{:,.1f}",
+        "proceeds": "{:,.1f}",
+        "current_value": "{:,.1f}",
+        "total_value": "{:,.1f}",
+        "gross_moic": "{:.1f}",
+        "gross_irr": "{:.1%}",
+    }
+    # Select display columns per request
+    cols = [
+        portfolio_header,
+        "fund_name",
+        "status",
+        "holding_years",
+        "invested",
+        "proceeds",
+        "current_value",
+        "total_value",
+        "gross_moic",
+        "gross_irr",
+    ]
+    out = out[[c for c in cols if c in out.columns]]
+    return out.style.format(fmt, na_rep="—")
+
 with left:
     st.subheader("Left View")
     f_left = render_and_filter(ops_df, key_prefix="cmp_left")
     st.markdown("**Track Record**")
     st.dataframe(_track_record_table(f_left, portfolio_header), use_container_width=True, key="cmp_tr_left")
+    st.markdown("**Subtotals**")
+    st.dataframe(_subtotals_table(f_left, portfolio_header), use_container_width=True, key="cmp_sub_left")
     st.markdown("**Value Creation (Portfolio)**")
     fig_l = _portfolio_vc_waterfall(f_left)
     if fig_l is not None:
@@ -202,6 +287,8 @@ with right:
     f_right = render_and_filter(ops_df, key_prefix="cmp_right")
     st.markdown("**Track Record**")
     st.dataframe(_track_record_table(f_right, portfolio_header), use_container_width=True, key="cmp_tr_right")
+    st.markdown("**Subtotals**")
+    st.dataframe(_subtotals_table(f_right, portfolio_header), use_container_width=True, key="cmp_sub_right")
     st.markdown("**Value Creation (Portfolio)**")
     fig_r = _portfolio_vc_waterfall(f_right)
     if fig_r is not None:
