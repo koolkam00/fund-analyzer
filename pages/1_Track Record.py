@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from filters import render_and_filter
 
 
 st.set_page_config(page_title="Track Record", layout="wide")
@@ -94,40 +95,7 @@ with np.errstate(divide="ignore", invalid="ignore"):
     ops_df["unrealized_moic"] = ops_df["current_value"] / ops_df["invested"]
 
 st.subheader("Filters")
-c1, c2, c3 = st.columns(3)
-c4, c5, c6 = st.columns(3)
-c7, c8, c9 = st.columns(3)
-def _vals(col: str):
-    return sorted(ops_df[col].dropna().unique().tolist()) if col in ops_df.columns else []
-sel_fund = c1.multiselect("Fund Name (GP)", _vals("fund_name"), default=_vals("fund_name"))
-sel_sector = c2.multiselect("Sector", _vals("sector"), default=_vals("sector"))
-sel_status = c3.multiselect("Status", _vals("status"), default=_vals("status"))
-sel_fund_ccy = c4.multiselect("Fund Currency", _vals("fund_currency"), default=_vals("fund_currency"))
-sel_country = c5.multiselect("Country (HQ)", _vals("geography"), default=_vals("geography"))
-sel_region = c6.multiselect("Region of majority operations", _vals("region"), default=_vals("region"))
-sel_strategy = c7.multiselect("Investment strategy", _vals("investment_strategy"), default=_vals("investment_strategy"))
-sel_instr = c8.multiselect("Instrument type", _vals("instrument_type"), default=_vals("instrument_type"))
-sel_exit_type = c9.multiselect("Exit type", _vals("exit_type"), default=_vals("exit_type"))
-
-f = ops_df.copy()
-if sel_fund and "fund_name" in f.columns:
-    f = f[f["fund_name"].isin(sel_fund)]
-if sel_sector and "sector" in f.columns:
-    f = f[f["sector"].isin(sel_sector)]
-if sel_status and "status" in f.columns:
-    f = f[f["status"].isin(sel_status)]
-if sel_fund_ccy and "fund_currency" in f.columns:
-    f = f[f["fund_currency"].isin(sel_fund_ccy)]
-if sel_country and "geography" in f.columns:
-    f = f[f["geography"].isin(sel_country)]
-if sel_region and "region" in f.columns:
-    f = f[f["region"].isin(sel_region)]
-if sel_strategy and "investment_strategy" in f.columns:
-    f = f[f["investment_strategy"].isin(sel_strategy)]
-if sel_instr and "instrument_type" in f.columns:
-    f = f[f["instrument_type"].isin(sel_instr)]
-if sel_exit_type and "exit_type" in f.columns:
-    f = f[f["exit_type"].isin(sel_exit_type)]
+f = render_and_filter(ops_df, key_prefix="tr")
 
 st.subheader("Track Record by Fund")
 if "fund_name" not in f.columns:

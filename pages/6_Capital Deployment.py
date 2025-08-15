@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from analysis import extract_operational_by_template_order, add_growth_and_cagr
+from filters import render_and_filter
 
 
 st.set_page_config(page_title="Capital Deployment & Realizations", layout="wide")
@@ -81,48 +82,7 @@ exit_date_raw = pd.to_datetime(ops_df_raw.get("exit_date"), errors="coerce")
 ops_df["year_exit_real"] = np.where(has_realization & exit_date_raw.notna(), exit_date_raw.dt.year, np.nan)
 
 st.subheader("Filters")
-c1, c2, c3 = st.columns(3)
-c4, c5, c6 = st.columns(3)
-c7, c8, _ = st.columns(3)
-
-def _vals(col: str) -> List[str]:
-    return sorted(ops_df[col].dropna().unique().tolist()) if col in ops_df.columns else []
-
-sectors = _vals("sector")
-geos = _vals("geography")
-statuses = _vals("status")
-funds = _vals("fund_name")
-strategies = _vals("investment_strategy")
-instruments = _vals("instrument_type")
-purchases = _vals("purchase_process")
-exit_types = _vals("exit_type")
-
-sel_sector = c1.multiselect("Sector", sectors, default=sectors)
-sel_geo = c2.multiselect("Geography", geos, default=geos)
-sel_status = c3.multiselect("Status", statuses, default=statuses)
-sel_fund = c4.multiselect("Fund Name (GP)", funds, default=funds)
-sel_strategy = c5.multiselect("Investment strategy", strategies, default=strategies)
-sel_instrument = c6.multiselect("Instrument type", instruments, default=instruments)
-sel_purchase = c7.multiselect("Purchase Process", purchases, default=purchases)
-sel_exit_type = c8.multiselect("Exit type", exit_types, default=exit_types)
-
-f = ops_df.copy()
-if sel_sector and "sector" in f.columns:
-    f = f[f["sector"].isin(sel_sector)]
-if sel_geo and "geography" in f.columns:
-    f = f[f["geography"].isin(sel_geo)]
-if sel_status and "status" in f.columns:
-    f = f[f["status"].isin(sel_status)]
-if sel_fund and "fund_name" in f.columns:
-    f = f[f["fund_name"].isin(sel_fund)]
-if sel_strategy and "investment_strategy" in f.columns:
-    f = f[f["investment_strategy"].isin(sel_strategy)]
-if sel_instrument and "instrument_type" in f.columns:
-    f = f[f["instrument_type"].isin(sel_instrument)]
-if sel_purchase and "purchase_process" in f.columns:
-    f = f[f["purchase_process"].isin(sel_purchase)]
-if sel_exit_type and "exit_type" in f.columns:
-    f = f[f["exit_type"].isin(sel_exit_type)]
+f = render_and_filter(ops_df, key_prefix="cap")
 
 st.subheader("Deployment by Investment Year (stacked by Sector) & WA Entry TEV/EBITDA")
 if {"invested", "sector", "year_invest"}.issubset(f.columns):
