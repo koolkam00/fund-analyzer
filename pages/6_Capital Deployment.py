@@ -72,6 +72,11 @@ ops_df["invest_date"] = pd.to_datetime(ops_df.get("invest_date"), errors="coerce
 ops_df["exit_date"] = pd.to_datetime(ops_df.get("exit_date"), errors="coerce")
 ops_df["year_invest"] = ops_df["invest_date"].dt.year
 ops_df["year_exit"] = ops_df["exit_date"].dt.year
+# New: determine realized year only when truly realized (not placeholder current month-end)
+ops_df["proceeds_num"] = pd.to_numeric(ops_df.get("proceeds"), errors="coerce")
+status_l = ops_df.get("status").astype(str).str.lower() if "status" in ops_df.columns else pd.Series("", index=ops_df.index)
+has_realization = (ops_df["proceeds_num"] > 0) | status_l.isin(["realized", "fully realized", "partially realized"])  # type: ignore
+ops_df["year_exit_real"] = np.where(has_realization, ops_df["exit_date"].dt.year, np.nan)
 
 st.subheader("Filters")
 c1, c2, c3 = st.columns(3)
@@ -174,13 +179,13 @@ if not wa_rev.empty:
 st.plotly_chart(fig_dep_rev, use_container_width=True)
 
 st.subheader("Realizations by Exit Year (stacked by Sector)")
-if {"proceeds", "sector", "year_exit"}.issubset(f.columns):
-    # Hide realizations where Exit Date is N/A by excluding NaN year_exit
+if {"proceeds", "sector", "year_exit_real"}.issubset(f.columns):
     real_stack = (
-        f.dropna(subset=["year_exit"])
-         .groupby(["year_exit", "sector"])['proceeds']
+        f.dropna(subset=["year_exit_real"])  # only when realized
+         .groupby(["year_exit_real", "sector"])['proceeds']
          .sum(min_count=1)
          .reset_index()
+         .rename(columns={"year_exit_real": "year_exit"})
     )
 else:
     real_stack = pd.DataFrame(columns=["year_exit", "sector", "proceeds"]) 
@@ -197,7 +202,7 @@ by_invest_year = (
     f.groupby("year_invest")["invested"].sum(min_count=1).reset_index().dropna(subset=["year_invest"]) if "invested" in f.columns else pd.DataFrame(columns=["year_invest", "invested"]) 
 )
 by_exit_year = (
-    f.dropna(subset=["year_exit"]).groupby("year_exit")["proceeds"].sum(min_count=1).reset_index() if "proceeds" in f.columns else pd.DataFrame(columns=["year_exit", "proceeds"]) 
+    f.dropna(subset=["year_exit_real"]).groupby("year_exit_real")["proceeds"].sum(min_count=1).reset_index().rename(columns={"year_exit_real": "year_exit"}) if ("proceeds" in f.columns and "year_exit_real" in f.columns) else pd.DataFrame(columns=["year_exit", "proceeds"]) 
 )
 years = sorted(set(by_invest_year.get("year_invest", pd.Series(dtype=int))).union(set(by_exit_year.get("year_exit", pd.Series(dtype=int)))))
 cum_df = pd.DataFrame({"year": years})
