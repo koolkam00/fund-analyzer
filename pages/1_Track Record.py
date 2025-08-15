@@ -169,117 +169,9 @@ summary_cols = [
 ]
 summary_cols = [c for c in summary_cols if c in f.columns or c in [portfolio_header]]
 
-overall_header = (
-    f"All Funds - TVPI: {overall_moic_str} | DPI: {overall_dpi_str} | RVPI: {overall_rvpi_str} | "
-    f"Invested: ${overall_invest:,.1f} | Realized: ${overall_proc:,.1f} | NAV: ${overall_nav:,.1f} | WA IRR: {wa_irr_overall_str}"
-)
-with st.expander(overall_header):
-    overall_row = pd.DataFrame([
-        {
-            portfolio_header: "Total",
-            "sector": "—",
-            "status": "—",
-            "ownership_pct": np.nan,
-            "pct_of_fund_invested": 1.0 if overall_invest > 0 else np.nan,
-            "invested": overall_invest,
-            "proceeds": overall_proc,
-            "current_value": overall_nav,
-            "realized_moic": (overall_proc / overall_invest) if overall_invest else np.nan,
-            "unrealized_moic": (overall_nav / overall_invest) if overall_invest else np.nan,
-            "gross_moic": overall_moic,
-            "gross_irr": wa_irr_overall,
-        }
-    ])
-    st.dataframe(_fmt(overall_row[summary_cols]), use_container_width=True)
-    # Quick nav to Company Detail from All Deals list
-    if {portfolio_header, "fund_name"}.issubset(f.columns):
-        c_nav1, c_nav2 = st.columns([3,1])
-        opts_df = f[[portfolio_header, "fund_name"]].dropna().astype(str).drop_duplicates()
-        opts_df["label"] = opts_df[portfolio_header] + " — " + opts_df["fund_name"]
-        sel = c_nav1.selectbox("Open a deal in Company Detail", opts_df["label"].tolist())
-        if c_nav2.button("Open", use_container_width=True):
-            parts = sel.split(" — ", 1)
-            st.session_state["detail_company"] = parts[0]
-            st.session_state["detail_fund"] = parts[1] if len(parts) > 1 else ""
-            try:
-                st.switch_page("pages/8_Company Detail.py")
-            except Exception:
-                pass
+## Removed top-level All Funds expander; will render All Funds subtotals at bottom
 
-    # Subtotals by realization status (Fully Realized, Partially Realized, Unrealized)
-    proceeds_num = pd.to_numeric(f.get("proceeds"), errors="coerce").fillna(0)
-    nav_num = pd.to_numeric(f.get("current_value"), errors="coerce").fillna(0)
-    invested_num = pd.to_numeric(f.get("invested"), errors="coerce").fillna(0)
-
-    is_fully_realized = (nav_num <= 0) & (proceeds_num > 0)
-    is_partially_realized = (proceeds_num > 0) & (nav_num > 0)
-    is_unrealized = (proceeds_num <= 0) & (nav_num > 0)
-
-    def _subtotal(label: str, mask: pd.Series) -> dict:
-        sub = f[mask].copy()
-        inv = float(pd.to_numeric(sub.get("invested"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
-        proc = float(pd.to_numeric(sub.get("proceeds"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
-        navv = float(pd.to_numeric(sub.get("current_value"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
-        invested_safe = inv if inv != 0 else np.nan
-        total_moic_sub = (proc + navv) / invested_safe if invested_safe else np.nan
-        realized_moic_sub = proc / invested_safe if invested_safe else np.nan
-        unrealized_moic_sub = navv / invested_safe if invested_safe else np.nan
-        wa_irr_sub = np.nan
-        if {"gross_irr", "invested"}.issubset(sub.columns) and inv > 0:
-            irr_vals = pd.to_numeric(sub["gross_irr"], errors="coerce").fillna(0)
-            weights = pd.to_numeric(sub["invested"], errors="coerce").clip(lower=0).fillna(0)
-            if float(weights.sum()) > 0:
-                wa_irr_sub = float(np.average(irr_vals, weights=weights))
-        return {
-            portfolio_header: label,
-            "sector": "—",
-            "status": "—",
-            "ownership_pct": np.nan,
-            "pct_of_fund_invested": (inv / overall_invest) if overall_invest > 0 else np.nan,
-            "invested": inv,
-            "proceeds": proc,
-            "current_value": navv,
-            "realized_moic": realized_moic_sub,
-            "unrealized_moic": unrealized_moic_sub,
-            "gross_moic": total_moic_sub,
-            "gross_irr": wa_irr_sub,
-        }
-
-    subtotals_rows = [
-        _subtotal("Fully Realized", is_fully_realized),
-        _subtotal("Partially Realized", is_partially_realized),
-        _subtotal("Unrealized", is_unrealized),
-    ]
-    subtotals_df = pd.DataFrame(subtotals_rows)
-    st.caption("Subtotals by realization status")
-    st.dataframe(_fmt(subtotals_df[summary_cols]), use_container_width=True)
-
-with st.expander("All Funds — All Deals"):
-    # reuse per-deal display columns used in fund sections
-    all_deals_cols = [
-        portfolio_header,
-        "sector",
-        "status",
-        "invest_date",
-        "exit_date",
-        "holding_years",
-        "ownership_pct",
-        "pct_of_fund_invested",
-        "invested",
-        "proceeds",
-        "current_value",
-        "realized_moic",
-        "unrealized_moic",
-        "gross_moic",
-        "gross_irr",
-        "fund_name",
-    ]
-    all_deals_cols = [c for c in all_deals_cols if c in f.columns or c == portfolio_header]
-    df_all = f[all_deals_cols].copy()
-    for dc in ["invest_date", "exit_date"]:
-        if dc in df_all.columns:
-            df_all[dc] = pd.to_datetime(df_all[dc], errors="coerce").dt.strftime("%b %Y")
-    st.dataframe(_fmt(df_all), use_container_width=True)
+## Removed All Funds — All Deals table per request
 
 for fund, g in f.groupby("fund_name"):
     # Fund totals
@@ -433,3 +325,51 @@ for fund, g in f.groupby("fund_name"):
                     pass
 
 
+# All Funds subtotals at bottom (not a dropdown)
+st.subheader("All Funds — Subtotals by realization status")
+proceeds_num = pd.to_numeric(f.get("proceeds"), errors="coerce").fillna(0)
+nav_num = pd.to_numeric(f.get("current_value"), errors="coerce").fillna(0)
+invested_num = pd.to_numeric(f.get("invested"), errors="coerce").fillna(0)
+
+is_fully_realized = (nav_num <= 0) & (proceeds_num > 0)
+is_partially_realized = (proceeds_num > 0) & (nav_num > 0)
+is_unrealized = (proceeds_num <= 0) & (nav_num > 0)
+
+def _subtotal_all(label: str, mask: pd.Series) -> dict:
+    sub = f[mask].copy()
+    inv = float(pd.to_numeric(sub.get("invested"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+    proc = float(pd.to_numeric(sub.get("proceeds"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+    navv = float(pd.to_numeric(sub.get("current_value"), errors="coerce").sum(skipna=True)) if not sub.empty else 0.0
+    invested_safe = inv if inv != 0 else np.nan
+    total_moic_sub = (proc + navv) / invested_safe if invested_safe else np.nan
+    realized_moic_sub = proc / invested_safe if invested_safe else np.nan
+    unrealized_moic_sub = navv / invested_safe if invested_safe else np.nan
+    wa_irr_sub = np.nan
+    if {"gross_irr", "invested"}.issubset(sub.columns) and inv > 0:
+        irr_vals = pd.to_numeric(sub["gross_irr"], errors="coerce").fillna(0)
+        weights = pd.to_numeric(sub["invested"], errors="coerce").clip(lower=0).fillna(0)
+        if float(weights.sum()) > 0:
+            wa_irr_sub = float(np.average(irr_vals, weights=weights))
+    return {
+        portfolio_header: label,
+        "sector": "—",
+        "status": "—",
+        "ownership_pct": np.nan,
+        "pct_of_fund_invested": (inv / overall_invest) if overall_invest > 0 else np.nan,
+        "invested": inv,
+        "proceeds": proc,
+        "current_value": navv,
+        "realized_moic": realized_moic_sub,
+        "unrealized_moic": unrealized_moic_sub,
+        "gross_moic": total_moic_sub,
+        "gross_irr": wa_irr_sub,
+    }
+
+subtotals_rows_all = [
+    _subtotal_all("Fully Realized", is_fully_realized),
+    _subtotal_all("Partially Realized", is_partially_realized),
+    _subtotal_all("Unrealized", is_unrealized),
+    _subtotal_all("Total", pd.Series(True, index=f.index)),
+]
+subtotals_df_all = pd.DataFrame(subtotals_rows_all)
+st.dataframe(_fmt(subtotals_df_all[summary_cols]), use_container_width=True)
