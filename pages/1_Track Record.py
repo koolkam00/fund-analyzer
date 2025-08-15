@@ -259,7 +259,7 @@ for fund, g in f.groupby("fund_name"):
     net_dpi_str = f"{net_dpi:.1f}x" if isinstance(net_dpi, (int, float)) and pd.notna(net_dpi) else "—"
     fund_header = (
         f"{fund} - Gross MOIC: {total_moic_str} | Gross IRR: {wa_irr_str} | Gross DPI: {fund_dpi_str} | "
-        f"Net IRR: {net_irr_str} | Net TVPI: {net_tvpi_str} | Net DPI: {net_dpi_str} | "
+        f"Net TVPI: {net_tvpi_str} | Net IRR: {net_irr_str} | Net DPI: {net_dpi_str} | "
         f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f}"
     )
     with st.expander(fund_header):
