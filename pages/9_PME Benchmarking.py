@@ -613,8 +613,13 @@ if not out.empty:
             return inv, navv, real, cnt
         inv_o, nav_o, real_o, cnt_o = _caps(over)
         inv_u, nav_u, real_u, cnt_u = _caps(under)
-        fig_hist.add_annotation(x=1.25, y=fig_hist.data[0]['y'].max() if len(fig_hist.data) else 0, text=f">=1: {cnt_o} deals | Invested ${inv_o:,.1f} | Realized ${real_o:,.1f} | NAV ${nav_o:,.1f}", showarrow=False, yanchor="bottom")
-        fig_hist.add_annotation(x=0.75, y=fig_hist.data[0]['y'].max() if len(fig_hist.data) else 0, text=f"<1: {cnt_u} deals | Invested ${inv_u:,.1f} | Realized ${real_u:,.1f} | NAV ${nav_u:,.1f}", showarrow=False, yanchor="bottom")
+        # Place summary annotations in paper coordinates to avoid reliance on internal trace arrays
+        fig_hist.add_annotation(xref="paper", yref="paper", x=0.75, y=1.05,
+                                text=f">=1: {cnt_o} deals | Invested ${inv_o:,.1f} | Realized ${real_o:,.1f} | NAV ${nav_o:,.1f}",
+                                showarrow=False, yanchor="bottom")
+        fig_hist.add_annotation(xref="paper", yref="paper", x=0.25, y=1.05,
+                                text=f"<1: {cnt_u} deals | Invested ${inv_u:,.1f} | Realized ${real_u:,.1f} | NAV ${nav_u:,.1f}",
+                                showarrow=False, yanchor="bottom")
         st.plotly_chart(fig_hist, use_container_width=True)
 
     # Portfolio summary: KS-PME, MOIC, IRR
