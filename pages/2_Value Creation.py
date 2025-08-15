@@ -331,14 +331,13 @@ if "fund_name" in f.columns:
                 tbl = tbl.sort_values(by=sort_col, key=lambda s: pd.to_numeric(s, errors="coerce"), ascending=sort_asc, na_position="last")
             else:
                 tbl = tbl.sort_values(by=sort_col, ascending=sort_asc, na_position="last")
-            # Format: percentages with one decimal; all other numerics one decimal
+            # Format: percentages with one decimal; numeric values one decimal
             fmt = {}
             for c in ["ebitda_growth_pct", "ebitda_cagr", "revenue_growth_pct", "revenue_cagr", "ebitda_margin_change_pct"]:
                 if c in tbl.columns:
                     fmt[c] = "{:.1%}"
-            for c in tbl.columns:
-                if c != portfolio_header and c not in fmt:
-                    # Numeric values to one decimal
+            for c in tbl.select_dtypes(include=["number"]).columns:
+                if c not in fmt:
                     fmt[c] = "{:.1f}"
             # Build subtotal rows: Weighted Avg (by Invested), Average, Median, Max, Min
             agg_rows = []
@@ -376,7 +375,10 @@ if "fund_name" in f.columns:
             # Render deals table and separate subtotals table
             num_cols = [c for c in tbl.columns if c != portfolio_header and pd.api.types.is_numeric_dtype(tbl[c])]
             st.caption("Deals")
-            st.dataframe(tbl.style.format(fmt).applymap(_neg_red, subset=num_cols), use_container_width=True)
+            sty = tbl.style.format(fmt, na_rep="—")
+            if num_cols:
+                sty = sty.applymap(_neg_red, subset=num_cols)
+            st.dataframe(sty, use_container_width=True)
 
             if agg_rows:
                 sub_df = pd.DataFrame(agg_rows)
@@ -384,5 +386,8 @@ if "fund_name" in f.columns:
                 sub_df = sub_df[[c for c in tbl.columns if c in sub_df.columns]]
                 sub_num_cols = [c for c in sub_df.columns if c != portfolio_header and pd.api.types.is_numeric_dtype(sub_df[c])]
                 st.caption("Subtotals")
-                st.dataframe(sub_df.style.format(fmt).applymap(_neg_red, subset=sub_num_cols), use_container_width=True)
+                sty2 = sub_df.style.format(fmt, na_rep="—")
+                if sub_num_cols:
+                    sty2 = sty2.applymap(_neg_red, subset=sub_num_cols)
+                st.dataframe(sty2, use_container_width=True)
 
