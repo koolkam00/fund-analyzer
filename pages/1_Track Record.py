@@ -344,21 +344,27 @@ def _subtotal_all(label: str, mask: pd.Series) -> dict:
     total_moic_sub = (proc + navv) / invested_safe if invested_safe else np.nan
     realized_moic_sub = proc / invested_safe if invested_safe else np.nan
     unrealized_moic_sub = navv / invested_safe if invested_safe else np.nan
+    total_val = proc + navv
     wa_irr_sub = np.nan
     if {"gross_irr", "invested"}.issubset(sub.columns) and inv > 0:
         irr_vals = pd.to_numeric(sub["gross_irr"], errors="coerce").fillna(0)
         weights = pd.to_numeric(sub["invested"], errors="coerce").clip(lower=0).fillna(0)
         if float(weights.sum()) > 0:
             wa_irr_sub = float(np.average(irr_vals, weights=weights))
+    # Weighted average holding years by invested
+    wa_hold_sub = np.nan
+    if {"holding_years", "invested"}.issubset(sub.columns) and inv > 0:
+        yrs_vals = pd.to_numeric(sub["holding_years"], errors="coerce").fillna(0)
+        weights = pd.to_numeric(sub["invested"], errors="coerce").clip(lower=0).fillna(0)
+        if float(weights.sum()) > 0:
+            wa_hold_sub = float(np.average(yrs_vals, weights=weights))
     return {
         portfolio_header: label,
-        "sector": "—",
-        "status": "—",
-        "ownership_pct": np.nan,
-        "pct_of_fund_invested": (inv / overall_invest) if overall_invest > 0 else np.nan,
+        "holding_years": wa_hold_sub,
         "invested": inv,
         "proceeds": proc,
         "current_value": navv,
+        "total_value": total_val,
         "realized_moic": realized_moic_sub,
         "unrealized_moic": unrealized_moic_sub,
         "gross_moic": total_moic_sub,
@@ -372,4 +378,18 @@ subtotals_rows_all = [
     _subtotal_all("Total", pd.Series(True, index=f.index)),
 ]
 subtotals_df_all = pd.DataFrame(subtotals_rows_all)
-st.dataframe(_fmt(subtotals_df_all[summary_cols]), use_container_width=True)
+# Display specific columns (remove sector/status), include WA holding years and total value
+all_cols = [
+    portfolio_header,
+    "holding_years",
+    "invested",
+    "proceeds",
+    "current_value",
+    "total_value",
+    "realized_moic",
+    "unrealized_moic",
+    "gross_moic",
+    "gross_irr",
+]
+subtotals_df_all = subtotals_df_all[[c for c in all_cols if c in subtotals_df_all.columns]]
+st.dataframe(_fmt(subtotals_df_all), use_container_width=True)
