@@ -436,18 +436,28 @@ def extract_operational_by_template_order(
         1: "portfolio_company",
         2: "invest_date",
         3: "fund_name",  # Fund Name (GP)
+        4: "fund_currency",
+        5: "cross_fund_investment",
         30: "equity_entry_total",  # Equity (Entry) ($MM)
         31: "kam_equity_entry",    # Kam Equity (Entry) ($MM)
         6: "geography",  # Country (HQ)
         7: "region",     # Region of majority operations (optional)
         8: "sector",     # Kam Vertical
+        9: "vertical_description",
+        10: "company_currency",
         11: "investment_strategy",
         12: "instrument_type",
+        13: "public_private",
         14: "purchase_process",
+        15: "purchase_type",
+        16: "deal_role",
+        17: "seller_type",
         18: "exit_date",
-        20: "status",    # Fund Position Status
         19: "exit_type",
+        20: "status",    # Fund Position Status
         38: "valuation_date",  # Most Recently Available Financial Statements
+        22: "date_investment",
+        23: "date_ipo",
         24: "invested",
         25: "proceeds",
         26: "current_value",
@@ -530,6 +540,14 @@ def extract_operational_by_template_order(
     add_text("investment_strategy", "investment_strategy")
     add_text("instrument_type", "instrument_type")
     add_text("purchase_process", "purchase_process")
+    add_text("fund_currency", "fund_currency")
+    add_text("cross_fund_investment", "cross_fund_investment")
+    add_text("vertical_description", "vertical_description")
+    add_text("company_currency", "company_currency")
+    add_text("public_private", "public_private")
+    add_text("purchase_type", "purchase_type")
+    add_text("deal_role", "deal_role")
+    add_text("seller_type", "seller_type")
     add_text("exit_type", "exit_type")
     add("sector", "sector")
     add("geography", "geography")
@@ -538,6 +556,8 @@ def extract_operational_by_template_order(
     # Portfolio metrics specific: allow status and valuation_date from headers
     add("status", "status")
     add("valuation_date", "valuation_date")
+    add("date_investment", "date_investment")
+    add("date_ipo", "date_ipo")
     add("entry_revenue", "entry_revenue")
     add("exit_revenue", "exit_revenue")
     add("entry_ebitda", "entry_ebitda")
