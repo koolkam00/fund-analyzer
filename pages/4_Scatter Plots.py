@@ -88,6 +88,10 @@ if {"entry_ebitda", "entry_revenue"}.issubset(filtered.columns):
     available_metrics.append("entry_margin_pct")
 if {"exit_ebitda", "exit_revenue"}.issubset(filtered.columns):
     available_metrics.append("exit_margin_pct")
+# Add LTV metrics if present
+for m in ["entry_ltv", "exit_ltv"]:
+    if m in filtered.columns and m not in available_metrics:
+        available_metrics.append(m)
 selected_metrics = st.multiselect("Select metrics (Y-axis)", available_metrics, default=available_metrics[:4])
 
 if not selected_metrics:
@@ -132,6 +136,9 @@ for r in range(rows):
             else:
                 plot_df["y_val"] = pd.to_numeric(plot_df.get(metric), errors="coerce")
                 is_percent = False
+            # Treat LTV as percent for axis formatting
+            if metric in ["entry_ltv", "exit_ltv"]:
+                is_percent = True
             if exclude_outliers and plot_df["y_val"].notna().sum() > 5:
                 q_low = plot_df["y_val"].quantile(low_pct / 100.0)
                 q_high = plot_df["y_val"].quantile(high_pct / 100.0)

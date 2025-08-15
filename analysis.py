@@ -589,6 +589,9 @@ def extract_operational_by_template_order(
         out["exit_leverage"] = np.where(out["exit_ebitda"] > 0, out["exit_net_debt"] / out["exit_ebitda"], np.nan)
         out["entry_tev_revenue"] = out["entry_tev"] / out["entry_revenue"]
         out["exit_tev_revenue"] = out["exit_tev"] / out["exit_revenue"]
+        # LTV: Net Debt / TEV (allow negative net debt; guard zero TEV)
+        out["entry_ltv"] = out["entry_net_debt"] / out["entry_tev"].replace({0: np.nan})
+        out["exit_ltv"] = out["exit_net_debt"] / out["exit_tev"].replace({0: np.nan})
 
     return out, mapping_used
 
