@@ -175,7 +175,13 @@ st.plotly_chart(fig_dep_rev, use_container_width=True)
 
 st.subheader("Realizations by Exit Year (stacked by Sector)")
 if {"proceeds", "sector", "year_exit"}.issubset(f.columns):
-    real_stack = f.groupby(["year_exit", "sector"])['proceeds'].sum(min_count=1).reset_index().dropna(subset=["year_exit"]) 
+    # Hide realizations where Exit Date is N/A by excluding NaN year_exit
+    real_stack = (
+        f.dropna(subset=["year_exit"])
+         .groupby(["year_exit", "sector"])['proceeds']
+         .sum(min_count=1)
+         .reset_index()
+    )
 else:
     real_stack = pd.DataFrame(columns=["year_exit", "sector", "proceeds"]) 
 fig_real = go.Figure()
@@ -191,7 +197,7 @@ by_invest_year = (
     f.groupby("year_invest")["invested"].sum(min_count=1).reset_index().dropna(subset=["year_invest"]) if "invested" in f.columns else pd.DataFrame(columns=["year_invest", "invested"]) 
 )
 by_exit_year = (
-    f.groupby("year_exit")["proceeds"].sum(min_count=1).reset_index().dropna(subset=["year_exit"]) if "proceeds" in f.columns else pd.DataFrame(columns=["year_exit", "proceeds"]) 
+    f.dropna(subset=["year_exit"]).groupby("year_exit")["proceeds"].sum(min_count=1).reset_index() if "proceeds" in f.columns else pd.DataFrame(columns=["year_exit", "proceeds"]) 
 )
 years = sorted(set(by_invest_year.get("year_invest", pd.Series(dtype=int))).union(set(by_exit_year.get("year_exit", pd.Series(dtype=int)))))
 cum_df = pd.DataFrame({"year": years})
