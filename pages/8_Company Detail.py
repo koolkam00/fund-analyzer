@@ -178,8 +178,9 @@ k3.metric("NAV", f"${nav:,.1f}" if pd.notna(nav) else "—")
 k4.metric("Total MOIC", f"{moic:.1f}x" if pd.notna(moic) else "—")
 k5.metric("Gross IRR", f"{irr:.1%}" if pd.notna(irr) else "—")
 
-# Secondary KPIs (not in a table)
+# Secondary KPIs (not in a table) + new mapped fields
 ks1, ks2, ks3, ks4, ks5 = st.columns(5)
+ks6, ks7, ks8, ks9, ks10 = st.columns(5)
 status_val = str(row.get("status", "")).strip()
 invest_dt = pd.to_datetime(row.get("invest_date"), errors="coerce")
 exit_dt = pd.to_datetime(row.get("exit_date"), errors="coerce")
@@ -203,6 +204,27 @@ ks2.metric("Invest Date", invest_str)
 ks3.metric("Exit Date", exit_str)
 ks4.metric("Sector", sector_val if sector_val else "—")
 ks5.metric("Ownership %", f"{own:.1%}" if pd.notna(own) else "—")
+ks6.metric("Fund Currency", str(row.get("fund_currency", "")).strip() or "—")
+ks7.metric("Country (HQ)", str(row.get("geography", "")).strip() or "—")
+ks8.metric("Region", str(row.get("region", "")).strip() or "—")
+ks9.metric("Strategy", str(row.get("investment_strategy", "")).strip() or "—")
+ks10.metric("Instrument", str(row.get("instrument_type", "")).strip() or "—")
+
+# Tertiary KPIs row
+kt1, kt2, kt3, kt4, kt5 = st.columns(5)
+kt1.metric("Public/Private", str(row.get("public_private", "")).strip() or "—")
+kt2.metric("Purchase Process", str(row.get("purchase_process", "")).strip() or "—")
+kt3.metric("Purchase Type", str(row.get("purchase_type", "")).strip() or "—")
+kt4.metric("Deal Role", str(row.get("deal_role", "")).strip() or "—")
+kt5.metric("Seller Type", str(row.get("seller_type", "")).strip() or "—")
+
+# Quaternary KPIs row
+kq1, kq2, kq3, kq4, kq5 = st.columns(5)
+kq1.metric("Exit Type", str(row.get("exit_type", "")).strip() or "—")
+kq2.metric("Fund Status", str(row.get("status", "")).strip() or "—")
+kq3.metric("Fund Name (GP)", str(row.get("fund_name", "")).strip() or "—")
+kq4.metric("Company CCY", str(row.get("company_currency", "")).strip() or "—")
+kq5.metric("Vertical Desc", str(row.get("vertical_description", "")).strip() or "—")
 
 # Compute EBITDA margins and change (guarding divides)
 g = g.copy()
