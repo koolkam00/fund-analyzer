@@ -37,7 +37,7 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 
 
 st.title("Deal Charts: Entry vs Exit")
-st.caption("Grouped bar charts by Portfolio Company for Revenue, EBITDA, and EBITDA Margin. Filters match other pages.")
+st.caption("Grouped bar charts by Portfolio Company for Revenue, EBITDA, EBITDA Margin, TEV/EBITDA, TEV/Revenue, Leverage, Net Debt, and TEV. Filters match other pages.")
 
 with st.sidebar:
     upload = st.file_uploader("Upload Portfolio Metrics file (.xlsx or .csv)", type=["xlsx", "csv"])  # type: ignore
@@ -165,5 +165,11 @@ grouped_bar(f, "entry_tev_revenue", "exit_tev_revenue", ",.1f", "TEV/Revenue: En
 
 st.subheader("Entry vs Exit Leverage (Net Debt / EBITDA)")
 grouped_bar(f, "entry_leverage", "exit_leverage", ",.1f", "Leverage: Entry vs Exit", x_order)
+
+st.subheader("Entry vs Exit Net Debt")
+grouped_bar(f, "entry_net_debt", "exit_net_debt", ",.1f", "Net Debt: Entry vs Exit", x_order)
+
+st.subheader("Entry vs Exit TEV")
+grouped_bar(f, "entry_tev", "exit_tev", ",.1f", "TEV: Entry vs Exit", x_order)
 
 
