@@ -98,11 +98,26 @@ if not required_bm.issubset(df_bm.columns):
     st.error(f"Benchmarks sheet missing columns: {sorted(required_bm - set(df_bm.columns))}")
     st.stop()
 
-# Coerce types
-for c in ["fund_size", "net_tvpi", "net_dpi"]:
-    df_funds[c] = pd.to_numeric(df_funds[c], errors="coerce")
-df_funds["net_irr"] = pd.to_numeric(df_funds["net_irr"], errors="coerce")
-df_funds["vintage_year"] = pd.to_numeric(df_funds["vintage_year"], errors="coerce").astype("Int64")
+# Coerce and clean types/units
+df_funds["fund_size"] = pd.to_numeric(df_funds.get("fund_size"), errors="coerce")
+
+# Clean Net TVPI/DPI possibly containing 'x' or other chars
+for c in ["net_tvpi", "net_dpi"]:
+    if c in df_funds.columns:
+        df_funds[c] = pd.to_numeric(
+            df_funds[c].astype(str).str.replace(r"[^0-9.\-]", "", regex=True),
+            errors="coerce",
+        )
+
+# Clean Net IRR possibly provided as percent strings or 18 for 18%
+if "net_irr" in df_funds.columns:
+    irr_clean = pd.to_numeric(
+        df_funds["net_irr"].astype(str).str.replace("%", "").str.strip(), errors="coerce"
+    )
+    # If values > 1 assume user provided percent (e.g., 18 => 18%) and scale to decimal
+    df_funds["net_irr"] = irr_clean.where(irr_clean <= 1.0, irr_clean / 100.0)
+
+df_funds["vintage_year"] = pd.to_numeric(df_funds.get("vintage_year"), errors="coerce").astype("Int64")
 
 df_bm["vintage_year"] = pd.to_numeric(df_bm["vintage_year"], errors="coerce").astype("Int64")
 df_bm["metric"] = df_bm["metric"].astype(str).str.strip().str.lower()
@@ -177,6 +192,9 @@ def _moic_fmt(v):
         return f"{float(v):.1f}x" if pd.notna(v) else "—"
     except Exception:
         return "—"
+# Ensure IRR is clean decimal for display
+if "net_irr" in tbl.columns:
+    tbl["net_irr"] = pd.to_numeric(tbl["net_irr"], errors="coerce")
 fmt = {"fund_size": "{:,.1f}", "net_irr": "{:.1%}"}
 sty = tbl.style.format(fmt, na_rep="—")
 if "net_tvpi" in tbl.columns:
