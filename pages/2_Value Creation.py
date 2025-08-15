@@ -71,49 +71,49 @@ f = render_and_filter(ops_df, key_prefix="vc")
 # Only include deals with complete inputs for value creation
 f = f[f.get("vc_valid", True).astype(bool)]
 
-st.subheader("Deal value creation table")
-# Compute additional change columns for TEV and leverage
-with np.errstate(all='ignore'):
-    f["tev_change"] = pd.to_numeric(f.get("exit_tev"), errors="coerce") - pd.to_numeric(f.get("entry_tev"), errors="coerce")
-    f["leverage_change"] = pd.to_numeric(f.get("exit_leverage"), errors="coerce") - pd.to_numeric(f.get("entry_leverage"), errors="coerce")
-portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
-display_cols = [
-    portfolio_header,
-    "status",
-    "holding_years",
-    "fund_name",
-    "sector",
-    "geography",
-    "invest_date",
-    "exit_date",
-    "entry_tev",
-    "exit_tev",
-    "entry_leverage",
-    "exit_leverage",
-    "tev_change",
-    "leverage_change",
-    "equity_entry",
-    "equity_exit",
-    "equity_change",
-    "vc_rev_growth",
-    "vc_margin_expansion",
-    "vc_multiple_change",
-    "vc_deleveraging",
-    "vc_bridge_sum",
-]
-view = f.copy()
-if portfolio_header not in view.columns and "portfolio_company" in view.columns:
-    view.insert(0, portfolio_header, view["portfolio_company"])  # ensure first col
-view = view[[c for c in display_cols if c in view.columns]]
-# Build a unique label (Company — Fund) to distinguish cross-fund investments for selections
-label_col_unique = f"{portfolio_header} (Fund)"
-if portfolio_header in view.columns and "fund_name" in view.columns:
-    view[label_col_unique] = view[portfolio_header].astype(str) + " — " + view["fund_name"].astype(str)
-else:
-    view[label_col_unique] = view.get(portfolio_header, pd.Series(dtype=str)).astype(str)
-fmt = {col: "{:.1f}" for col in view.select_dtypes(include=["number"]).columns}
-# Percent formatting for leverage change is in turns of x, keep as numeric; dates below formatted elsewhere
-st.dataframe(view.style.format(fmt), use_container_width=True)
+with st.expander("Deal Value Creation Table", expanded=False):
+    # Compute additional change columns for TEV and leverage
+    with np.errstate(all='ignore'):
+        f["tev_change"] = pd.to_numeric(f.get("exit_tev"), errors="coerce") - pd.to_numeric(f.get("entry_tev"), errors="coerce")
+        f["leverage_change"] = pd.to_numeric(f.get("exit_leverage"), errors="coerce") - pd.to_numeric(f.get("entry_leverage"), errors="coerce")
+    portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
+    display_cols = [
+        portfolio_header,
+        "status",
+        "holding_years",
+        "fund_name",
+        "sector",
+        "geography",
+        "invest_date",
+        "exit_date",
+        "entry_tev",
+        "exit_tev",
+        "entry_leverage",
+        "exit_leverage",
+        "tev_change",
+        "leverage_change",
+        "equity_entry",
+        "equity_exit",
+        "equity_change",
+        "vc_rev_growth",
+        "vc_margin_expansion",
+        "vc_multiple_change",
+        "vc_deleveraging",
+        "vc_bridge_sum",
+    ]
+    view = f.copy()
+    if portfolio_header not in view.columns and "portfolio_company" in view.columns:
+        view.insert(0, portfolio_header, view["portfolio_company"])  # ensure first col
+    view = view[[c for c in display_cols if c in view.columns]]
+    # Build a unique label (Company — Fund) to distinguish cross-fund investments for selections
+    label_col_unique = f"{portfolio_header} (Fund)"
+    if portfolio_header in view.columns and "fund_name" in view.columns:
+        view[label_col_unique] = view[portfolio_header].astype(str) + " — " + view["fund_name"].astype(str)
+    else:
+        view[label_col_unique] = view.get(portfolio_header, pd.Series(dtype=str)).astype(str)
+    fmt = {col: "{:.1f}" for col in view.select_dtypes(include=["number"]).columns}
+    # Percent formatting for leverage change is in turns of x, keep as numeric; dates below formatted elsewhere
+    st.dataframe(view.style.format(fmt), use_container_width=True)
 
 # Quick navigation to Company Detail
 if {portfolio_header, "fund_name"}.issubset(view.columns):
