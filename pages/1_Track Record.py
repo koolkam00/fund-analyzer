@@ -39,7 +39,7 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 st.title("Track Record")
 st.caption("Grouped by fund. Expand a fund to view per-deal details; collapse to view totals.")
 
-sheets, ops_sheet_name, _, _ = ensure_workbook_loaded()
+sheets, ops_sheet_name, funds_sheet_name, _ = ensure_workbook_loaded()
 if not sheets:
     st.info("Upload a workbook to begin.")
     st.stop()
@@ -54,6 +54,45 @@ if ops_df_raw.empty:
     st.stop()
 
 ops_df = add_growth_and_cagr(ops_df_raw)
+
+# Map Fund-level Net Returns from Funds sheet (sheet 2)
+fund_net_map: Dict[str, Dict[str, float]] = {}
+try:
+    if funds_sheet_name and funds_sheet_name in sheets:
+        df_funds = sheets[funds_sheet_name].copy()
+        # Normalize columns
+        def _norm(s: str) -> str:
+            return str(s).strip().lower().replace(" ", "_")
+        df_funds.columns = [_norm(c) for c in df_funds.columns]
+        # Expected columns: fund, fund_size, vintage_year, net_irr, net_tvpi, net_dpi
+        if "fund" in df_funds.columns:
+            # Clean numeric fields
+            if "net_irr" in df_funds.columns:
+                irr_str = (
+                    df_funds["net_irr"].astype(str)
+                    .str.replace(r"[^0-9.\-%]", "", regex=True)
+                    .str.strip()
+                )
+                has_pct = irr_str.str.contains("%", regex=False)
+                irr_num = pd.to_numeric(irr_str.str.replace("%", ""), errors="coerce")
+                df_funds["net_irr"] = irr_num.where(~(has_pct | (irr_num > 1.0)), irr_num / 100.0)
+            for c in ["net_tvpi", "net_dpi"]:
+                if c in df_funds.columns:
+                    df_funds[c] = pd.to_numeric(
+                        df_funds[c].astype(str).str.replace(r"[^0-9.\-\.]", "", regex=True),
+                        errors="coerce",
+                    )
+            for _, r in df_funds.iterrows():
+                key = str(r.get("fund", "")).strip().lower()
+                if not key:
+                    continue
+                fund_net_map[key] = {
+                    "net_irr": float(r.get("net_irr")) if pd.notna(r.get("net_irr")) else float("nan"),
+                    "net_tvpi": float(r.get("net_tvpi")) if pd.notna(r.get("net_tvpi")) else float("nan"),
+                    "net_dpi": float(r.get("net_dpi")) if pd.notna(r.get("net_dpi")) else float("nan"),
+                }
+except Exception:
+    fund_net_map = {}
 
 # Ensure identity/display columns
 portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
@@ -209,8 +248,20 @@ for fund, g in f.groupby("fund_name"):
     fund_rvpi = (fund_nav / fund_invest) if fund_invest else np.nan
     fund_dpi_str = f"{fund_dpi:.1f}x" if pd.notna(fund_dpi) else "—"
     fund_rvpi_str = f"{fund_rvpi:.1f}x" if pd.notna(fund_rvpi) else "—"
+    # Append Net returns if available from Funds sheet
+    net_irr = net_tvpi = net_dpi = None
+    if fund_net_map:
+        rec = fund_net_map.get(str(fund).strip().lower())
+        if rec:
+            net_irr = rec.get("net_irr")
+            net_tvpi = rec.get("net_tvpi")
+            net_dpi = rec.get("net_dpi")
+    net_irr_str = f"{net_irr:.1%}" if isinstance(net_irr, (int, float)) and pd.notna(net_irr) else "—"
+    net_tvpi_str = f"{net_tvpi:.1f}x" if isinstance(net_tvpi, (int, float)) and pd.notna(net_tvpi) else "—"
+    net_dpi_str = f"{net_dpi:.1f}x" if isinstance(net_dpi, (int, float)) and pd.notna(net_dpi) else "—"
     fund_header = (
         f"{fund} - TVPI: {total_moic_str} | DPI: {fund_dpi_str} | RVPI: {fund_rvpi_str} | "
+        f"Net IRR: {net_irr_str} | Net TVPI: {net_tvpi_str} | Net DPI: {net_dpi_str} | "
         f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f} | WA IRR: {wa_irr_str}"
     )
     with st.expander(fund_header):
