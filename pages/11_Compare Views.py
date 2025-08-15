@@ -151,20 +151,20 @@ with left:
     st.subheader("Left View")
     f_left = render_and_filter(ops_df, key_prefix="cmp_left")
     st.markdown("**Track Record**")
-    st.dataframe(_track_record_table(f_left, portfolio_header), use_container_width=True)
+    st.dataframe(_track_record_table(f_left, portfolio_header), use_container_width=True, key="cmp_tr_left")
     st.markdown("**Value Creation (Portfolio)**")
     fig_l = _portfolio_vc_waterfall(f_left)
     if fig_l is not None:
-        st.plotly_chart(fig_l, use_container_width=True)
+        st.plotly_chart(fig_l, use_container_width=True, key="cmp_vc_left")
 
 with right:
     st.subheader("Right View")
     f_right = render_and_filter(ops_df, key_prefix="cmp_right")
     st.markdown("**Track Record**")
-    st.dataframe(_track_record_table(f_right, portfolio_header), use_container_width=True)
+    st.dataframe(_track_record_table(f_right, portfolio_header), use_container_width=True, key="cmp_tr_right")
     st.markdown("**Value Creation (Portfolio)**")
     fig_r = _portfolio_vc_waterfall(f_right)
     if fig_r is not None:
-        st.plotly_chart(fig_r, use_container_width=True)
+        st.plotly_chart(fig_r, use_container_width=True, key="cmp_vc_right")
 
 
