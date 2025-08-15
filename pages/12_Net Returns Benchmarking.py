@@ -238,11 +238,30 @@ def _metric_chart(metric_key: str, title: str, is_percent: bool) -> None:
         uq.append(float(pd.to_numeric(row.get("upper_quartile"), errors="coerce")))
         top5.append(float(pd.to_numeric(row.get("top5%"), errors="coerce")))
 
+    # Build stacked segments representing the full spectrum up to Top5%
+    def _seg(a, b):
+        try:
+            av = float(a) if pd.notna(a) else np.nan
+            bv = float(b) if pd.notna(b) else np.nan
+            if not np.isfinite(av):
+                av = 0.0
+            if not np.isfinite(bv):
+                return np.nan
+            return max(0.0, bv - av)
+        except Exception:
+            return np.nan
+
+    # Segments: LQ (0->LQ), Median (LQ->Med), UQ (Med->UQ), Top5 (UQ->Top5)
+    seg_lq = [float(v) if pd.notna(v) else np.nan for v in lq]
+    seg_med = [_seg(a, b) for a, b in zip(lq, med)]
+    seg_uq = [_seg(a, b) for a, b in zip(med, uq)]
+    seg_top5 = [_seg(a, b) for a, b in zip(uq, top5)]
+
     fig = go.Figure()
-    fig.add_bar(name="Lower Quartile", x=vintages, y=lq, marker_color="#98df8a")
-    fig.add_bar(name="Median", x=vintages, y=med, marker_color="#1f77b4")
-    fig.add_bar(name="Upper Quartile", x=vintages, y=uq, marker_color="#ff7f0e")
-    fig.add_bar(name="Top 5%", x=vintages, y=top5, marker_color="#d62728")
+    fig.add_bar(name="Lower Quartile", x=vintages, y=seg_lq, marker_color="#98df8a")
+    fig.add_bar(name="Median", x=vintages, y=seg_med, marker_color="#1f77b4")
+    fig.add_bar(name="Upper Quartile", x=vintages, y=seg_uq, marker_color="#ff7f0e")
+    fig.add_bar(name="Top 5%", x=vintages, y=seg_top5, marker_color="#d62728")
 
     # Overlay fund dots for this metric
     funds_metric = df_out[["fund", "vintage_year", metric_key]].copy()
@@ -259,7 +278,7 @@ def _metric_chart(metric_key: str, title: str, is_percent: bool) -> None:
         )
 
     fig.update_layout(
-        barmode="group",
+        barmode="stack",
         title=title,
         xaxis_title="Vintage Year",
         legend_title_text="Benchmarks",
