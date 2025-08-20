@@ -35,22 +35,21 @@ def _normalize_cf(df: pd.DataFrame) -> pd.DataFrame:
     cols = list(df.columns)
     out = pd.DataFrame()
     def _parse_date_col(s: pd.Series) -> pd.Series:
-        # Native parse first
+        # Robust parsing: native -> Excel serial -> YYYYMMDD -> day-first
         d = pd.to_datetime(s, errors="coerce")
         numeric = pd.to_numeric(s, errors="coerce")
-        is_num = numeric.notna().mean() > 0.5
-        if is_num:
-            # If native parse produced many 1969-1971 dates (epoch ns mis-parse), switch to Excel serial logic
-            years = d.dt.year.where(d.notna())
-            many_epoch = (d.notna().mean() > 0.5) and (years.between(1969, 1971).mean() > 0.5)
-            looks_excel_range = numeric.between(20000, 60000).mean() > 0.5
-            if many_epoch or looks_excel_range:
-                origin = pd.Timestamp("1899-12-30")
-                return origin + pd.to_timedelta(numeric, unit="D")
-        # If many NaT and mostly digits, also try Excel serial
-        if (d.isna().mean() > 0.5) and (s.astype(str).str.fullmatch(r"\d+").mean() > 0.5):
+        if d.isna().mean() > 0.5 and numeric.notna().mean() > 0.5:
             origin = pd.Timestamp("1899-12-30")
-            return origin + pd.to_timedelta(numeric, unit="D")
+            d2 = origin + pd.to_timedelta(numeric.fillna(0).astype(float), unit="D")
+            d = d.fillna(d2)
+        mask_8 = d.isna() & s.astype(str).str.fullmatch(r"\d{8}")
+        if mask_8.any():
+            d_ymd = pd.to_datetime(s.where(mask_8), format="%Y%m%d", errors="coerce")
+            d = d.where(~mask_8, d_ymd)
+        mask_df = d.isna()
+        if mask_df.any():
+            d_df = pd.to_datetime(s.where(mask_df), errors="coerce", dayfirst=True)
+            d = d.fillna(d_df)
         return d
     if len(cols) >= 1:
         out["date"] = _parse_date_col(df.iloc[:, 0])

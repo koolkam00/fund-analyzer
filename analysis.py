@@ -11,16 +11,27 @@ from pandas.tseries.offsets import MonthEnd
 
 
 def parse_to_datetime(series: pd.Series) -> pd.Series:
-    """Robust date parsing with common formats and Excel serials."""
+    """Even more robust date parsing for mixed formats, Excel serials, and day-first variations."""
     if pd.api.types.is_datetime64_any_dtype(series):
-        return pd.to_datetime(series)
-    # Try direct parse; coerce errors to NaT
-    parsed = pd.to_datetime(series, errors="coerce")
-    # Attempt Excel serial handling if many NaT remain and series is numeric
-    if parsed.isna().mean() > 0.5 and pd.api.types.is_numeric_dtype(series):
-        # Excel origin 1899-12-30
+        return pd.to_datetime(series, errors="coerce")
+    s = series
+    parsed = pd.to_datetime(s, errors="coerce")
+    # Excel serials fallback when numeric-like
+    numeric = pd.to_numeric(s, errors="coerce")
+    if parsed.isna().mean() > 0.5 and numeric.notna().mean() > 0.5:
         origin = pd.Timestamp("1899-12-30")
-        parsed = origin + pd.to_timedelta(series.fillna(0).astype(float), unit="D")
+        parsed_excel = origin + pd.to_timedelta(numeric.fillna(0).astype(float), unit="D")
+        parsed = parsed.fillna(parsed_excel)
+    # 8-digit YYYYMMDD
+    mask_8 = parsed.isna() & s.astype(str).str.fullmatch(r"\d{8}")
+    if mask_8.any():
+        parsed_ymd = pd.to_datetime(s.where(mask_8), format="%Y%m%d", errors="coerce")
+        parsed = parsed.where(~mask_8, parsed_ymd)
+    # day-first reparse for remaining
+    mask_df = parsed.isna()
+    if mask_df.any():
+        parsed_df = pd.to_datetime(s.where(mask_df), errors="coerce", dayfirst=True)
+        parsed = parsed.fillna(parsed_df)
     return parsed
 
 
