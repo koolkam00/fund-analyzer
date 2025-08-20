@@ -18,11 +18,19 @@ st.set_page_config(page_title="Track Record", layout="wide")
 st.markdown(
     """
     <style>
-    div[data-testid="stExpander"] button p {
+    /* Keep expander header text on one line and consistent styling */
+    div[data-testid="stExpander"] button,
+    div[data-testid="stExpander"] button p,
+    div[data-testid="stExpander"] button span {
         font-size: 0.95rem !important;
         font-weight: 500 !important;
         font-family: inherit !important;
         line-height: 1.2 !important;
+        white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     </style>
     """,
@@ -291,12 +299,17 @@ for fund, g in f.groupby("fund_name"):
     net_dpi_str = f"{net_dpi:.1f}x" if isinstance(net_dpi, (int, float)) and pd.notna(net_dpi) else "—"
     deployed_pct = (fund_invest / fund_size_mm) if (pd.notna(fund_size_mm) and fund_size_mm > 0) else np.nan
     deployed_str = f"{deployed_pct:.1%}" if pd.notna(deployed_pct) else "—"
+    # Compose fund size with non-breaking formatting to avoid line splits
     fund_size_str = f"${fund_size_mm:,.1f}MM" if pd.notna(fund_size_mm) else "—"
+    fund_size_str = fund_size_str.replace(",", "\u202F")  # thin non-breaking space for thousands
+    invested_str = f"${fund_invest:,.1f}".replace(",", "\u202F")
+    realized_str = f"${fund_proceeds:,.1f}".replace(",", "\u202F")
+    nav_str = f"${fund_nav:,.1f}".replace(",", "\u202F")
     fund_header = (
         f"{fund} - Gross MOIC: {total_moic_str} | Gross IRR: {wa_irr_str} | Gross DPI: {fund_dpi_str} | "
         f"Net TVPI: {net_tvpi_str} | Net IRR: {net_irr_str} | Net DPI: {net_dpi_str} | "
         f"Fund Size: {fund_size_str} | Deployed: {deployed_str} | "
-        f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f}"
+        f"Invested: {invested_str} | Realized: {realized_str} | NAV: {nav_str}"
     )
     with st.expander(fund_header):
         # Server-side sorting selector for per-fund table (deal rows only)
