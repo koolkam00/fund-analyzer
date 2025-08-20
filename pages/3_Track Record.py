@@ -299,17 +299,29 @@ for fund, g in f.groupby("fund_name"):
     net_dpi_str = f"{net_dpi:.1f}x" if isinstance(net_dpi, (int, float)) and pd.notna(net_dpi) else "—"
     deployed_pct = (fund_invest / fund_size_mm) if (pd.notna(fund_size_mm) and fund_size_mm > 0) else np.nan
     deployed_str = f"{deployed_pct:.1%}" if pd.notna(deployed_pct) else "—"
-    # Compose fund size with non-breaking formatting to avoid line splits
-    fund_size_str = f"${fund_size_mm:,.1f}MM" if pd.notna(fund_size_mm) else "—"
-    fund_size_str = fund_size_str.replace(",", "\u202F")  # thin non-breaking space for thousands
-    invested_str = f"${fund_invest:,.1f}".replace(",", "\u202F")
-    realized_str = f"${fund_proceeds:,.1f}".replace(",", "\u202F")
-    nav_str = f"${fund_nav:,.1f}".replace(",", "\u202F")
+
+    def _fmt_size_mm(mm: float) -> str:
+        try:
+            val = float(mm)
+        except Exception:
+            return "—"
+        if not np.isfinite(val):
+            return "—"
+        # Use B for billions to reduce width
+        if val >= 1000.0:
+            return f"${val/1000.0:,.1f}B"
+        return f"${val:,.1f}MM"
+
+    fund_size_str = _fmt_size_mm(fund_size_mm) if pd.notna(fund_size_mm) else "—"
+    invested_str = _fmt_size_mm(fund_invest) if pd.notna(fund_invest) else "—"
+    realized_str = _fmt_size_mm(fund_proceeds) if pd.notna(fund_proceeds) else "—"
+    nav_str = _fmt_size_mm(fund_nav) if pd.notna(fund_nav) else "—"
+
     fund_header = (
         f"{fund} - Gross MOIC: {total_moic_str} | Gross IRR: {wa_irr_str} | Gross DPI: {fund_dpi_str} | "
         f"Net TVPI: {net_tvpi_str} | Net IRR: {net_irr_str} | Net DPI: {net_dpi_str} | "
-        f"Fund Size: {fund_size_str} | Deployed: {deployed_str} | "
-        f"Invested: {invested_str} | Realized: {realized_str} | NAV: {nav_str}"
+        f"FS: {fund_size_str} | Dep: {deployed_str} | "
+        f"Inv: {invested_str} | Real: {realized_str} | NAV: {nav_str}"
     )
     with st.expander(fund_header):
         # Server-side sorting selector for per-fund table (deal rows only)
