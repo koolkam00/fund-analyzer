@@ -54,51 +54,6 @@ def ensure_workbook_loaded() -> Tuple[Dict[str, pd.DataFrame], Optional[str], Op
     xls = pd.ExcelFile(bio, engine="openpyxl")
     sheets: Dict[str, pd.DataFrame] = {sheet: xls.parse(sheet, header=header_zero) for sheet in xls.sheet_names}
 
-    # Normalize date-like columns robustly across all sheets
-    def _parse_date_any(series: pd.Series) -> pd.Series:
-        if pd.api.types.is_datetime64_any_dtype(series):
-            return pd.to_datetime(series, errors="coerce")
-        s = series
-        parsed = pd.to_datetime(s, errors="coerce")
-        # Excel serials handling when numeric-like
-        numeric = pd.to_numeric(s, errors="coerce")
-        if parsed.isna().mean() > 0.5 and numeric.notna().mean() > 0.5:
-            origin = pd.Timestamp("1899-12-30")
-            parsed_excel = origin + pd.to_timedelta(numeric.fillna(0).astype(float), unit="D")
-            parsed = parsed.fillna(parsed_excel)
-        # 8-digit YYYYMMDD
-        mask_8 = parsed.isna() & s.astype(str).str.fullmatch(r"\d{8}")
-        if mask_8.any():
-            parsed_ymd = pd.to_datetime(s.where(mask_8), format="%Y%m%d", errors="coerce")
-            parsed = parsed.where(~mask_8, parsed_ymd)
-        # Try day-first on remaining
-        mask_df = parsed.isna()
-        if mask_df.any():
-            parsed_df = pd.to_datetime(s.where(mask_df), errors="coerce", dayfirst=True)
-            parsed = parsed.fillna(parsed_df)
-        return parsed
-
-    def _looks_like_date_col(name: str) -> bool:
-        n = str(name).strip().lower()
-        if "date" in n:
-            return True
-        # Common aliases without the word 'date'
-        tokens = ["investment", "invest", "exit", "ipo", "valuation", "financial", "acquisition"]
-        return any(t in n for t in tokens)
-
-    for sheet_name, df in list(sheets.items()):
-        if df is None or df.empty:
-            continue
-        df_norm = df.copy()
-        for col in df_norm.columns:
-            if _looks_like_date_col(col):
-                try:
-                    df_norm[col] = _parse_date_any(df_norm[col])
-                except Exception:
-                    # Best effort; leave as-is on failure
-                    pass
-        sheets[sheet_name] = df_norm
-
     sheet_names = list(sheets.keys())
     ops_sheet_name = sheet_names[0] if sheet_names else None
     funds_sheet_name = sheet_names[1] if len(sheet_names) > 1 else None
