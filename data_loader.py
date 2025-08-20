@@ -253,9 +253,10 @@ def build_master_workbook_template() -> bytes:
         "Multiple: Net DPI (e.g., 0.9)",
     ]
 
-    # Benchmarks headers
-    bench_headers = ["Vintage Year", "Metric", "Top5%", "Upper Quartile", "Median", "Lower Quartile"]
+    # Benchmarks headers (now includes Asset Type)
+    bench_headers = ["Asset Type", "Vintage Year", "Metric", "Top5%", "Upper Quartile", "Median", "Lower Quartile"]
     bench_instructions = [
+        "Text: Asset type for benchmarks (e.g., Buyout, Growth, Venture)",
         "Integer: Vintage year (e.g., 2019)",
         "Text: One of 'Net IRR', 'Net TVPI', 'Net DPI'",
         "Threshold: Top 5% value (percent or multiple)",

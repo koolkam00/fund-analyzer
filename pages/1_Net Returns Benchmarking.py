@@ -80,6 +80,12 @@ df_bm.columns = [_norm(c) for c in df_bm.columns]
 
 required_funds = {"fund", "fund_size", "vintage_year", "net_irr", "net_tvpi", "net_dpi"}
 required_bm = {"vintage_year", "metric", "top5%", "upper_quartile", "median", "lower_quartile"}
+# Optional asset type support
+asset_col = None
+for cand in ["asset_type", "asset", "type"]:
+    if cand in df_bm.columns:
+        asset_col = cand
+        break
 # Normalize common alternate spellings in benchmarks
 rename_map = {}
 for col in list(df_bm.columns):
@@ -154,8 +160,8 @@ metric_map = {
 }
 df_bm["metric"] = df_bm["metric"].map(lambda x: metric_map.get(x, x))
 
-# Build thresholds per (vintage_year, metric)
-key_cols = ["vintage_year", "metric"]
+# Build thresholds per (asset_type?, vintage_year, metric)
+key_cols = ([asset_col] if asset_col else []) + ["vintage_year", "metric"]
 thresh_cols = ["top5%", "upper_quartile", "median", "lower_quartile"]
 bm_valid = df_bm[key_cols + thresh_cols].copy()
 bm_valid = bm_valid.dropna(subset=["vintage_year", "metric"])
@@ -184,7 +190,15 @@ def classify(value: float, row: pd.Series) -> str:
     except Exception:
         return "—"
 
-# Merge thresholds for each metric by vintage
+sel_asset = None
+if asset_col:
+    assets = sorted(df_bm[asset_col].dropna().astype(str).unique().tolist())
+    if assets:
+        sel_asset = st.selectbox("Benchmark asset type", ["(All)"] + assets, index=0)
+        if sel_asset != "(All)":
+            bm_valid = bm_valid[bm_valid[asset_col].astype(str) == sel_asset]
+
+# Merge thresholds for each metric by vintage (and asset type if selected)
 def add_bucket(funds: pd.DataFrame, metric: str, label: str) -> pd.Series:
     left = funds[["vintage_year", metric]].copy()
     left = left.rename(columns={metric: "value"})
