@@ -24,6 +24,20 @@ def ensure_workbook_loaded() -> Tuple[Dict[str, pd.DataFrame], Optional[str], Op
             key="wb_header_row_index",
         )
         upload = st.file_uploader("Upload Excel workbook (.xlsx)", type=["xlsx"], key="wb_file_uploader")  # type: ignore
+        # Provide master workbook template download under file format controls
+        # Master workbook template download (headers on row 2, instructions on row 1)
+        try:
+            templ_bytes = build_master_workbook_template()
+        except Exception:
+            templ_bytes = None
+        if templ_bytes:
+            st.download_button(
+                label="Download Master Workbook Template",
+                data=templ_bytes,
+                file_name="PE_Fund_Analyzer_Template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
 
     # If already loaded and no new upload, reuse existing
     if "workbook" in st.session_state and upload is None:
@@ -247,6 +261,25 @@ def build_master_workbook_template() -> bytes:
         for i, hdr in enumerate(bench_headers, start=1):
             col_letter = get_column_letter(i)
             ws3.column_dimensions[col_letter].width = max(14, min(32, len(str(hdr)) + 4))
+
+        # PME Cash Flows sheet (fourth sheet)
+        pme_headers = ["Date", "Type", "Value", "Portfolio Company", "Fund"]
+        pme_instructions = [
+            "Required: Yes — Date (YYYY-MM-DD or Excel date).",
+            "Required: Yes — Text: Capital Call / Distribution / NAV.",
+            "Required: Yes — Number $MM; Calls negative, Distributions & NAV positive.",
+            "Required: Yes — Text: Company name (matches Portfolio Metrics).",
+            "Required: Yes — Text: Fund name (Column E).",
+        ]
+        pd.DataFrame(columns=pme_headers).to_excel(
+            writer, sheet_name="PME Cash Flows", index=False, startrow=1
+        )
+        ws4 = writer.sheets["PME Cash Flows"]
+        for idx, instr in enumerate(pme_instructions, start=1):
+            ws4.cell(row=1, column=idx, value=instr)
+        for i, hdr in enumerate(pme_headers, start=1):
+            col_letter = get_column_letter(i)
+            ws4.column_dimensions[col_letter].width = max(14, min(34, len(str(hdr)) + 4))
 
     return bio.getvalue()
 

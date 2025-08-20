@@ -21,25 +21,6 @@ st.set_page_config(page_title="PME Benchmarking (KS-PME)", layout="wide")
 
 
 @st.cache_data(show_spinner=False)
-def _read_excel_or_csv(upload, header_row_index: int) -> pd.DataFrame:
-    if upload is None:
-        return pd.DataFrame()
-    header_zero = max(0, int(header_row_index) - 1)
-    name = upload.name.lower()
-    if name.endswith(".csv"):
-        content = upload.getvalue()
-        try:
-            text = content.decode("utf-8", errors="ignore")
-        except Exception:
-            text = content.decode("latin-1", errors="ignore")
-        return pd.read_csv(io.StringIO(text), header=header_zero)
-    else:
-        content = upload.getvalue()
-        bio = io.BytesIO(content)
-        return pd.read_excel(bio, header=header_zero, engine="openpyxl")
-
-
-@st.cache_data(show_spinner=False)
 def _fetch_index_history(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     data = yf.download(ticker, start=start.date(), end=end.date(), progress=False, auto_adjust=True)
     if data is None or data.empty:
@@ -251,58 +232,18 @@ def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
 
 
 st.title("Benchmarking: KS-PME vs Public Indices")
-st.caption("Upload gross cash flows by deal to compute KS-PME against S&P 500 / Nasdaq / Dow Jones.")
+st.caption("Uses the 'PME Cash Flows' sheet from the uploaded master workbook to compute KS-PME.")
 
-st.markdown(
-    """
-    KS-PME compares a deal's performance to a public index by scaling all cash flows by index levels over time.
-    - KS-PME > 1.0: outperformed the selected index
-    - KS-PME < 1.0: underperformed the selected index
-    """
-)
-
-def _download_template_button():
-    example = pd.DataFrame(
-        [
-            {"Date": pd.Timestamp("2020-01-15"), "Type": "Capital Call", "Value": 25.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
-            {"Date": pd.Timestamp("2022-07-10"), "Type": "Distribution", "Value": 10.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
-            {"Date": pd.Timestamp("2024-12-31"), "Type": "NAV", "Value": 20.0, "Portfolio Company": "Alpha", "Fund": "Fund I"},
-        ]
-    )
-    bio = io.BytesIO()
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        # Ensure Fund is in column E by specifying column order
-        cols = ["Date", "Type", "Value", "Portfolio Company", "Fund"]
-        example[cols].to_excel(writer, index=False, sheet_name="CashFlows")
-    bio.seek(0)
-    st.download_button(
-        label="Download cash flow template (Excel)",
-        data=bio.getvalue(),
-        file_name="cash_flows_template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-_download_template_button()
+from data_loader import ensure_workbook_loaded
 
 with st.sidebar:
-    upload = st.file_uploader("Upload cash flows (.xlsx or .csv) — columns: Date | Type | Value | Portfolio Company | Fund", type=["xlsx", "csv"])  # type: ignore
-    header_row_index = st.number_input(
-        "Header row (1-based)",
-        min_value=1,
-        max_value=100,
-        value=int(st.session_state.get("pme_header_row_index", 1)),
-        step=1,
-        key="pme_header_row_index_input",
-    )
-    # Persist header row selection in session state
-    st.session_state["pme_header_row_index"] = int(header_row_index)
+    sheets, _, _, _ = ensure_workbook_loaded()
     index_options = [
         "S&P 500 (\u005EGSPC)",
         "Nasdaq Composite (\u005EIXIC)",
         "Dow Jones (\u005EDJI)",
         "Russell 2000 (\u005ERUT)",
         "Russell 3000 (\u005ERUA)",
-        # S&P Sector ETFs (SPDR)
         "S&P Comm Services (XLC)",
         "S&P Consumer Discretionary (XLY)",
         "S&P Consumer Staples (XLP)",
@@ -323,20 +264,24 @@ with st.sidebar:
         key="pme_index_choice",
     )
 
-if upload is not None:
-    raw_df = _read_excel_or_csv(upload, header_row_index)
-    # Persist the loaded DataFrame for cross-page navigation
-    st.session_state["pme_raw_df"] = raw_df
-else:
-    raw_df = st.session_state.get("pme_raw_df", pd.DataFrame())
-
-if raw_df.empty:
-    st.info("Upload a cash flow file to begin.")
+if not sheets:
+    st.info("Upload the master workbook (with 'PME Cash Flows' sheet) using the sidebar.")
     st.stop()
+
+# Locate PME Cash Flows sheet
+pme_sheet_name = None
+for name in sheets.keys():
+    if str(name).strip().lower() in {"pme cash flows", "pme_cash_flows", "pme", "cash flows", "cashflows"}:
+        pme_sheet_name = name
+        break
+if pme_sheet_name is None:
+    # Fallback to last sheet (template uses 'PME Cash Flows' as 4th)
+    pme_sheet_name = list(sheets.keys())[-1]
+raw_df = sheets.get(pme_sheet_name, pd.DataFrame())
 
 cf = _normalize_cf(raw_df)
 if cf.empty:
-    st.error("No valid rows found. Ensure Date, Type, Value, and Portfolio Company are provided.")
+    st.error("No valid rows found in 'PME Cash Flows'. Ensure Date, Type, Value, Portfolio Company, and Fund are provided.")
     st.stop()
 
 min_dt = pd.to_datetime(cf["date"], errors="coerce").min()
@@ -351,7 +296,6 @@ ticker_map = {
     "Dow Jones (\u005EDJI)": "^DJI",
     "Russell 2000 (\u005ERUT)": "^RUT",
     "Russell 3000 (\u005ERUA)": "^RUA",
-    # Sector ETFs
     "S&P Comm Services (XLC)": "XLC",
     "S&P Consumer Discretionary (XLY)": "XLY",
     "S&P Consumer Staples (XLP)": "XLP",
