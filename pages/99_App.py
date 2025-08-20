@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from analysis import add_growth_and_cagr, extract_operational_by_template_order
+from data_loader import build_master_workbook_template
 
 
 st.set_page_config(page_title="PE Fund Analyzer", layout="wide")
@@ -75,6 +76,16 @@ def sidebar_inputs() -> Tuple[str, Dict[str, str], Dict[str, object], Optional[p
 def main():
     st.title("Private Equity Fund Analyzer")
     st.caption("Upload your Portfolio Metrics file and explore deal-level and portfolio summary tables.")
+
+    with st.expander("Download master Excel template (all required sheets)", expanded=False):
+        templ_bytes = build_master_workbook_template()
+        st.download_button(
+            label="Download Master Workbook Template",
+            data=templ_bytes,
+            file_name="PE_Fund_Analyzer_Template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
     data_shape, mapping, options, df = sidebar_inputs()
 
