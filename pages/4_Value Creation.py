@@ -67,6 +67,8 @@ with st.expander("Deal Value Creation Table", expanded=False):
     with np.errstate(all='ignore'):
         f["tev_change"] = pd.to_numeric(f.get("exit_tev"), errors="coerce") - pd.to_numeric(f.get("entry_tev"), errors="coerce")
         f["leverage_change"] = pd.to_numeric(f.get("exit_leverage"), errors="coerce") - pd.to_numeric(f.get("entry_leverage"), errors="coerce")
+        # TEV/EBITDA multiple change
+        f["tev_ebitda_change"] = pd.to_numeric(f.get("exit_tev_ebitda"), errors="coerce") - pd.to_numeric(f.get("entry_tev_ebitda"), errors="coerce")
     portfolio_header = df.columns[0] if len(df.columns) > 0 else "Portfolio Company"
     display_cols = [
         portfolio_header,
@@ -79,9 +81,12 @@ with st.expander("Deal Value Creation Table", expanded=False):
         "exit_date",
         "entry_tev",
         "exit_tev",
+        "entry_tev_ebitda",
+        "exit_tev_ebitda",
         "entry_leverage",
         "exit_leverage",
         "tev_change",
+        "tev_ebitda_change",
         "leverage_change",
         "equity_entry",
         "equity_exit",
@@ -269,8 +274,11 @@ if "fund_name" in f.columns:
                 "ebitda_margin_change_pct",
                 "entry_tev",
                 "exit_tev",
+                "entry_tev_ebitda",
+                "exit_tev_ebitda",
                 "entry_leverage",
                 "exit_leverage",
+                "tev_ebitda_change",
             ]
             cols = [c for c in cols if c in g.columns or c == portfolio_header]
             tbl = g[cols].copy()
