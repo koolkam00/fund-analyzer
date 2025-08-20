@@ -14,6 +14,21 @@ from filters import render_and_filter
 
 st.set_page_config(page_title="Track Record", layout="wide")
 
+# Ensure consistent header font styling for all expanders on this page
+st.markdown(
+    """
+    <style>
+    div[data-testid="stExpander"] button p {
+        font-size: 0.95rem !important;
+        font-weight: 500 !important;
+        font-family: inherit !important;
+        line-height: 1.2 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_data(show_spinner=False)
 def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]:
