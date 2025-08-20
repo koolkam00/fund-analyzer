@@ -42,6 +42,8 @@ def ensure_workbook_loaded() -> Tuple[Dict[str, pd.DataFrame], Optional[str], Op
     # If already loaded and no new upload, reuse existing
     if "workbook" in st.session_state and upload is None:
         wb = st.session_state["workbook"]
+        # Render manager banner if available
+        _maybe_render_manager_banner(wb.get("manager_profile"))
         return wb["sheets"], wb.get("ops_sheet_name"), wb.get("funds_sheet_name"), wb.get("bench_sheet_name")
 
     if upload is None:
@@ -59,17 +61,50 @@ def ensure_workbook_loaded() -> Tuple[Dict[str, pd.DataFrame], Optional[str], Op
     funds_sheet_name = sheet_names[1] if len(sheet_names) > 1 else None
     bench_sheet_name = sheet_names[2] if len(sheet_names) > 2 else None
 
+    # Detect manager profile sheet (prefer by name, else 5th sheet)
+    manager_profile = None
+    mgr_sheet_name = None
+    for nm in sheet_names:
+        low = str(nm).strip().lower()
+        if low in {"fund manager profile", "manager profile", "fund manager"}:
+            mgr_sheet_name = nm
+            break
+    if mgr_sheet_name is None and len(sheet_names) > 4:
+        mgr_sheet_name = sheet_names[4]
+    if mgr_sheet_name and mgr_sheet_name in sheets:
+        try:
+            df_mgr = sheets[mgr_sheet_name].copy()
+            if not df_mgr.empty:
+                # Normalize columns and take first non-empty row as profile
+                def _norm(s: str) -> str:
+                    return str(s).strip().lower().replace(" ", "_")
+                df_mgr.columns = [_norm(c) for c in df_mgr.columns]
+                first = df_mgr.iloc[0].to_dict()
+                manager_profile = {k: first.get(k) for k in df_mgr.columns}
+                st.session_state["manager_profile"] = manager_profile
+                # Derive manager display name
+                for key in ("manager_name", "firm_name", "name"):
+                    if key in manager_profile and pd.notna(manager_profile[key]):
+                        st.session_state["manager_name"] = str(manager_profile[key])
+                        break
+        except Exception:
+            manager_profile = None
+
     st.session_state["workbook"] = {
         "sheets": sheets,
         "ops_sheet_name": ops_sheet_name,
         "funds_sheet_name": funds_sheet_name,
         "bench_sheet_name": bench_sheet_name,
         "header_row_index": header_row_index,
+        "manager_profile": manager_profile,
     }
     # Back-compat for existing pages
     st.session_state["sheets"] = sheets
     st.session_state["selected_sheet"] = ops_sheet_name
     st.session_state["header_row_index"] = header_row_index
+
+    # Render manager banner on main area
+    _maybe_render_manager_banner(manager_profile)
 
     return sheets, ops_sheet_name, funds_sheet_name, bench_sheet_name
 
@@ -281,5 +316,74 @@ def build_master_workbook_template() -> bytes:
             col_letter = get_column_letter(i)
             ws4.column_dimensions[col_letter].width = max(14, min(34, len(str(hdr)) + 4))
 
+        # Fund Manager Profile (fifth sheet)
+        mgr_headers = [
+            "Manager Name",
+            "Firm Name",
+            "Headquarters",
+            "AUM ($MM)",
+            "Strategy Focus",
+            "Region Focus",
+            "Year Founded",
+            "Team Size",
+            "Contact Email",
+            "Website",
+            "Description",
+        ]
+        mgr_instructions = [
+            "Required: Yes — Manager/Principal name.",
+            "Optional — Firm name.",
+            "Optional — City, Country.",
+            "Optional — Total AUM in $MM.",
+            "Optional — Primary strategy (e.g., Buyout, Growth).",
+            "Optional — Primary regions.",
+            "Optional — Year founded.",
+            "Optional — Team size.",
+            "Optional — Contact email.",
+            "Optional — Firm website URL.",
+            "Optional — Short description/bio.",
+        ]
+        pd.DataFrame(columns=mgr_headers).to_excel(
+            writer, sheet_name="Fund Manager Profile", index=False, startrow=1
+        )
+        ws5 = writer.sheets["Fund Manager Profile"]
+        for idx, instr in enumerate(mgr_instructions, start=1):
+            ws5.cell(row=1, column=idx, value=instr)
+        for i, hdr in enumerate(mgr_headers, start=1):
+            col_letter = get_column_letter(i)
+            ws5.column_dimensions[col_letter].width = max(16, min(50, len(str(hdr)) + 6))
+
     return bio.getvalue()
+
+
+def _maybe_render_manager_banner(manager_profile: Optional[Dict[str, object]]) -> None:
+    try:
+        name = None
+        if manager_profile:
+            for key in ("manager_name", "firm_name", "name"):
+                val = manager_profile.get(key)
+                if val is not None and pd.notna(val):
+                    name = str(val)
+                    break
+        if not name:
+            name = st.session_state.get("manager_name")
+        if name:
+            st.markdown(
+                f"""
+                <style>
+                .mgr-banner {{
+                    background: #f5f7fb;
+                    border: 1px solid #e4e8f0;
+                    border-radius: 6px;
+                    padding: 6px 10px;
+                    margin-bottom: 8px;
+                    font-weight: 600;
+                }}
+                </style>
+                <div class=\"mgr-banner\">Fund Manager: {name}</div>
+                """,
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
 

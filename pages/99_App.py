@@ -76,6 +76,10 @@ def sidebar_inputs() -> Tuple[str, Dict[str, str], Dict[str, object], Optional[p
 def main():
     st.title("Private Equity Fund Analyzer")
     st.caption("Upload your Portfolio Metrics file and explore deal-level and portfolio summary tables.")
+    # Show manager banner if available in session
+    mgr_name = st.session_state.get("manager_name")
+    if mgr_name:
+        st.markdown(f"**Fund Manager:** {mgr_name}")
 
     with st.expander("Download master Excel template (all required sheets)", expanded=False):
         templ_bytes = build_master_workbook_template()
