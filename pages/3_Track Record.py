@@ -55,8 +55,9 @@ if ops_df_raw.empty:
 
 ops_df = add_growth_and_cagr(ops_df_raw)
 
-# Map Fund-level Net Returns from Funds sheet (sheet 2)
+# Map Fund-level data (Net Returns and Fund Size) from Funds sheet (sheet 2)
 fund_net_map: Dict[str, Dict[str, float]] = {}
+fund_size_map: Dict[str, float] = {}
 try:
     if funds_sheet_name and funds_sheet_name in sheets:
         df_funds = sheets[funds_sheet_name].copy()
@@ -65,6 +66,12 @@ try:
             return str(s).strip().lower().replace(" ", "_")
         df_funds.columns = [_norm(c) for c in df_funds.columns]
         # Expected columns: fund, fund_size, vintage_year, net_irr, net_tvpi, net_dpi
+        # Clean fund size (in $MM)
+        if "fund_size" in df_funds.columns:
+            df_funds["fund_size"] = pd.to_numeric(
+                df_funds["fund_size"].astype(str).str.replace(r"[^0-9.\-]", "", regex=True),
+                errors="coerce",
+            )
         if "fund" in df_funds.columns:
             # Clean numeric fields
             if "net_irr" in df_funds.columns:
@@ -91,6 +98,8 @@ try:
                     "net_tvpi": float(r.get("net_tvpi")) if pd.notna(r.get("net_tvpi")) else float("nan"),
                     "net_dpi": float(r.get("net_dpi")) if pd.notna(r.get("net_dpi")) else float("nan"),
                 }
+                if pd.notna(r.get("fund_size")):
+                    fund_size_map[key] = float(r.get("fund_size"))
 except Exception:
     fund_net_map = {}
 
@@ -216,12 +225,20 @@ for fund, g in f.groupby("fund_name"):
         if w.notna().sum() and float(w.sum()) > 0:
             wa_irr = float(np.average(irr_vals.fillna(0), weights=w.fillna(0)))
 
-    # Build per-deal rows with required columns and computed % of total invested
+    # Resolve fund size (in $MM) if available
+    fund_key = str(fund).strip().lower()
+    fund_size_mm = fund_size_map.get(fund_key, np.nan)
+
+    # Build per-deal rows with required columns and computed % of fund size invested
     rows = g.copy()
-    if fund_invest and fund_invest > 0:
-        rows["pct_of_fund_invested"] = rows["invested"] / fund_invest
+    if pd.notna(fund_size_mm) and fund_size_mm > 0:
+        rows["pct_of_fund_invested"] = pd.to_numeric(rows["invested"], errors="coerce") / float(fund_size_mm)
     else:
-        rows["pct_of_fund_invested"] = np.nan
+        # Fallback to share of this fund's invested total
+        if fund_invest and fund_invest > 0:
+            rows["pct_of_fund_invested"] = pd.to_numeric(rows["invested"], errors="coerce") / fund_invest
+        else:
+            rows["pct_of_fund_invested"] = np.nan
 
     display_cols = [
         portfolio_header,          # 1
@@ -257,9 +274,13 @@ for fund, g in f.groupby("fund_name"):
     net_irr_str = f"{net_irr:.1%}" if isinstance(net_irr, (int, float)) and pd.notna(net_irr) else "—"
     net_tvpi_str = f"{net_tvpi:.1f}x" if isinstance(net_tvpi, (int, float)) and pd.notna(net_tvpi) else "—"
     net_dpi_str = f"{net_dpi:.1f}x" if isinstance(net_dpi, (int, float)) and pd.notna(net_dpi) else "—"
+    deployed_pct = (fund_invest / fund_size_mm) if (pd.notna(fund_size_mm) and fund_size_mm > 0) else np.nan
+    deployed_str = f"{deployed_pct:.1%}" if pd.notna(deployed_pct) else "—"
+    fund_size_str = f"${fund_size_mm:,.1f}MM" if pd.notna(fund_size_mm) else "—"
     fund_header = (
         f"{fund} - Gross MOIC: {total_moic_str} | Gross IRR: {wa_irr_str} | Gross DPI: {fund_dpi_str} | "
         f"Net TVPI: {net_tvpi_str} | Net IRR: {net_irr_str} | Net DPI: {net_dpi_str} | "
+        f"Fund Size: {fund_size_str} | Deployed: {deployed_str} | "
         f"Invested: ${fund_invest:,.1f} | Realized: ${fund_proceeds:,.1f} | NAV: ${fund_nav:,.1f}"
     )
     with st.expander(fund_header):
