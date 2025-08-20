@@ -134,7 +134,7 @@ def build_master_workbook_template() -> bytes:
 
     portfolio_instructions = [
         "Required: Yes — Text. If no data: N/A not allowed; provide a unique company name.",
-        "Required: No — Date (YYYY-MM-DD or Excel date). If no data: leave blank.",
+        "Required: Yes — Date (YYYY-MM-DD or Excel date). If no data: cannot be blank; used for filters, charts, and holding period.",
         "Required: No — Text. If no data: leave blank.",
         "Required: No — Text (e.g., USD, EUR). If no data: leave blank.",
         "Required: No — Text Yes/No. If no data: leave blank.",
