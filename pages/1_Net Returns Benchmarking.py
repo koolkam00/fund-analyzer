@@ -54,15 +54,7 @@ def _read_excel(upload) -> Dict[str, pd.DataFrame]:
 st.title("Net Returns Benchmarking")
 st.caption("Upload net returns and vintage benchmarks, then classify funds into Top 5% and quartiles.")
 
-# Template download
-templ = _template_excel()
-st.download_button(
-    label="Download Excel Template",
-    data=templ,
-    file_name="net_returns_benchmarking_template.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
-)
+## Template download removed (master workbook template is available in the sidebar)
 
 from data_loader import ensure_workbook_loaded
 sheets, _, funds_sheet_name, bench_sheet_name = ensure_workbook_loaded()
