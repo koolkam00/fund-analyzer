@@ -37,6 +37,10 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 
 
 st.title("Scatter Plots by Investment Date")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Upload the Portfolio Metrics file and visualize metrics vs Investment Date. Color = Fund Name (GP), Size = Invested.")
 
 with st.sidebar:

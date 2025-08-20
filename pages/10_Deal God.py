@@ -38,6 +38,10 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 
 
 st.title("Deal God")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Query your uploaded Portfolio Metrics using a language model. The model sees a compact summary + sample rows.")
 
 with st.sidebar:

@@ -60,6 +60,10 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 
 
 st.title("Track Record")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Grouped by fund. Expand a fund to view per-deal details; collapse to view totals.")
 
 sheets, ops_sheet_name, funds_sheet_name, _ = ensure_workbook_loaded()

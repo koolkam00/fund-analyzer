@@ -49,6 +49,10 @@ def _read_excel_or_csv(upload, header_row_index: int) -> Dict[str, pd.DataFrame]
 
 
 st.title("Compare Views")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Side-by-side analysis with independent filters on each side.")
 
 sheets, ops_sheet_name, _, _ = ensure_workbook_loaded()

@@ -82,11 +82,14 @@ def ensure_workbook_loaded() -> Tuple[Dict[str, pd.DataFrame], Optional[str], Op
                 first = df_mgr.iloc[0].to_dict()
                 manager_profile = {k: first.get(k) for k in df_mgr.columns}
                 st.session_state["manager_profile"] = manager_profile
-                # Derive manager display name
-                for key in ("manager_name", "firm_name", "name"):
+                # Derive firm display name (prefer firm_name)
+                firm_val = None
+                for key in ("firm_name", "name", "manager_name"):
                     if key in manager_profile and pd.notna(manager_profile[key]):
-                        st.session_state["manager_name"] = str(manager_profile[key])
+                        firm_val = str(manager_profile[key])
                         break
+                if firm_val:
+                    st.session_state["firm_name"] = firm_val
         except Exception:
             manager_profile = None
 
@@ -318,7 +321,6 @@ def build_master_workbook_template() -> bytes:
 
         # Fund Manager Profile (fifth sheet)
         mgr_headers = [
-            "Manager Name",
             "Firm Name",
             "Headquarters",
             "AUM ($MM)",
@@ -331,8 +333,7 @@ def build_master_workbook_template() -> bytes:
             "Description",
         ]
         mgr_instructions = [
-            "Required: Yes — Manager/Principal name.",
-            "Optional — Firm name.",
+            "Required: Yes — Firm name.",
             "Optional — City, Country.",
             "Optional — Total AUM in $MM.",
             "Optional — Primary strategy (e.g., Buyout, Growth).",
@@ -360,13 +361,13 @@ def _maybe_render_manager_banner(manager_profile: Optional[Dict[str, object]]) -
     try:
         name = None
         if manager_profile:
-            for key in ("manager_name", "firm_name", "name"):
+            for key in ("firm_name", "name"):
                 val = manager_profile.get(key)
                 if val is not None and pd.notna(val):
                     name = str(val)
                     break
         if not name:
-            name = st.session_state.get("manager_name")
+            name = st.session_state.get("firm_name")
         if name:
             st.markdown(
                 f"""

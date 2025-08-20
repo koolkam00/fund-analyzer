@@ -52,6 +52,10 @@ def _read_excel(upload) -> Dict[str, pd.DataFrame]:
 
 
 st.title("Net Returns Benchmarking")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Upload net returns and vintage benchmarks, then classify funds into Top 5% and quartiles.")
 
 ## Template download removed (master workbook template is available in the sidebar)

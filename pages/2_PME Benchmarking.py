@@ -232,6 +232,10 @@ def _xirr(dates: list[pd.Timestamp], amounts: list[float]) -> float | None:
 
 
 st.title("Benchmarking: KS-PME vs Public Indices")
+# Show firm on top if available
+firm = st.session_state.get("firm_name")
+if firm:
+    st.markdown(f"**Firm:** {firm}")
 st.caption("Uses the 'PME Cash Flows' sheet from the uploaded master workbook to compute KS-PME.")
 
 from data_loader import ensure_workbook_loaded
